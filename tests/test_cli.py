@@ -202,6 +202,8 @@ def test_main_return_address_from_shipping_settings(http, tmp_path, printed):
         mock.patch("shippy.cli.shipping.build_address") as build_address,
         mock.patch("shippy.cli.generate_addresses_manual", return_value=iter([])),
         mock.patch("shippy.cli.load_logo"),
+        # Real discovery would depend on this machine's printers.
+        mock.patch("shippy.cli.printer_gate.wait_for_printer"),
     ):
         cli.main()
 
