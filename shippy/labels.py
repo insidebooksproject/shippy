@@ -1,4 +1,4 @@
-"""Shared label journal glue: duplicate checks and label status tracking.
+"""Shared label journal glue: label purchase and status tracking.
 
 The journal lives in ibp-printing and is shared with shippy-gui and the label
 watcher, so a label bought in either app is seen by both. Its functions never
@@ -8,9 +8,8 @@ error can never break shipping (it is logged and ignored).
 
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional
 
 import ibp_printing
 from ibp_printing.log import get_logger
@@ -18,9 +17,6 @@ from ibp_printing.log import get_logger
 logger = get_logger("shippy")
 
 APP_NAME = "shippy"
-
-# How far back a label for the same recipient counts as a possible duplicate.
-DUPLICATE_WINDOW_HOURS = 12
 
 STATUS_PRINTED = "printed"
 STATUS_QUEUED = "queued"
@@ -58,19 +54,6 @@ def identity_for(address: Mapping[str, Any]) -> LabelIdentity:
 def tracking_ref(shipment) -> str:
     """The journal's key for a shipment: tracking code, else shipment id."""
     return shipment.tracking_code or shipment.id
-
-
-def find_duplicates(identity: LabelIdentity) -> list:
-    """Recent labels for the same recipient; empty if the journal is unavailable."""
-    try:
-        return list(
-            ibp_printing.find_duplicates(
-                identity.recipient_key, within_hours=DUPLICATE_WINDOW_HOURS
-            )
-        )
-    except Exception:  # pylint: disable=broad-exception-caught
-        logger.exception("duplicate-label check failed; not checking")
-        return []
 
 
 def pending_labels() -> list:
@@ -123,46 +106,3 @@ def retry_meta(
         meta["recipient_label"] = identity.recipient_label
         meta["recipient_key"] = identity.recipient_key
     return meta
-
-
-def format_time(value: Any) -> str:
-    """HH:MM of a journal timestamp (epoch seconds) today, else date and time."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return str(value or "?")
-    moment = datetime.fromtimestamp(value)
-    if moment.date() == datetime.now().date():
-        return moment.strftime("%H:%M")
-    return moment.strftime("%b %d %H:%M")
-
-
-def describe_state(record: Any) -> str:
-    """What happened to an earlier label, phrased after "is already"."""
-    status = getattr(record, "status", "")
-    if status == STATUS_QUEUED:
-        return "queued — it will print automatically when the printer works"
-    if status == STATUS_CHECK_PRINTER:
-        return "waiting at the printer: check the printer before reprinting"
-    if status == STATUS_PRINTED:
-        return f"printed at {format_time(record.updated or record.created)}"
-    if status == STATUS_REFUNDED:
-        return f"refunded at {format_time(record.updated or record.created)}"
-    return (
-        f"bought at {format_time(record.created)} (its print outcome is unknown: "
-        "check the printer before reprinting)"
-    )
-
-
-def duplicate_question(records: Sequence[Any]) -> str:
-    """Ask whether to create a label although one already exists."""
-    newest = records[0]  # ibp-printing lists the newest first
-    text = (
-        f"A label for {newest.recipient_label} is already "
-        f"{describe_state(newest)} (tracking {newest.tracking_code})."
-    )
-    others = len(records) - 1
-    if others:
-        text += (
-            f" {others} other label(s) were made for this address in the last "
-            f"{DUPLICATE_WINDOW_HOURS} hours."
-        )
-    return f"{text} Create another label anyway?"

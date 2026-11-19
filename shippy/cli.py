@@ -43,9 +43,18 @@ DIAG_LOG_APP_NAME = "diag"
 
 logger = get_logger("shippy")
 
-# Volunteer-facing styles: warnings, and the "do not create it again" banner.
+# Shipping modes where the volunteer types the address (and so can fix it).
+TYPED_ADDRESS_MODES = frozenset({"manual"})
+
+# Volunteer-facing style for warnings and notices.
 WARNING_STYLE = "fg:yellow"
-BANNER_STYLE = "bold fg:ansiblack bg:ansiyellow"
+
+# What to do when a label may not have printed. Unused labels are refunded
+# automatically (a weekly job on the IBP server), so a second label is cheap.
+CREATE_AGAIN_ADVICE = (
+    "Check the printer. If no label came out, create it again; the unused one "
+    "is refunded automatically."
+)
 
 # Outcomes whose raw value reads badly after "the printer queue reported".
 OUTCOME_DETAILS = {
@@ -112,6 +121,15 @@ def generate_addresses_bulk(config: Config):
 STALE_UNIT_AGE = datetime.timedelta(days=90)
 """How old an inmate's unit data can be before shippy warns it may be outdated."""
 
+# The backend's ``inmate_status`` on a request address: whether it just
+# re-checked the inmate with TDCJ. Older backends don't send it.
+INMATE_CURRENT = "current"
+"""Re-checked with TDCJ just now (or the data was fresh): ship normally."""
+INMATE_NOT_LISTED = "not_listed"
+"""TDCJ no longer lists the inmate (e.g. released): don't ship."""
+INMATE_UNVERIFIED = "unverified"
+"""TDCJ couldn't be reached; the stored unit was used."""
+
 
 def fetch_request_address(
     server: Server, request_id: typing.Union[typing.Tuple[str, int, int], int]
@@ -126,22 +144,61 @@ def fetch_request_address(
     return server.request_address(request_id)
 
 
-def unit_is_stale(
+def unit_age(
     datetime_fetched: typing.Optional[str], now: datetime.datetime
-) -> bool:
-    """Whether an inmate's unit was last fetched too long ago (or never)."""
+) -> typing.Optional[datetime.timedelta]:
+    """How long ago an inmate's unit was fetched; None if never (or unreadable)."""
     if not datetime_fetched:
-        return True
+        return None
 
     try:
         fetched = datetime.datetime.fromisoformat(datetime_fetched)
     except ValueError:
-        return True
+        return None
 
     if fetched.tzinfo is None:
         fetched = fetched.replace(tzinfo=datetime.timezone.utc)
 
-    return now - fetched > STALE_UNIT_AGE
+    return now - fetched
+
+
+def unit_is_stale(
+    datetime_fetched: typing.Optional[str], now: datetime.datetime
+) -> bool:
+    """Whether an inmate's unit was last fetched too long ago (or never)."""
+    age = unit_age(datetime_fetched, now)
+    return age is None or age > STALE_UNIT_AGE
+
+
+def stale_unit_warning(
+    address: dict[str, typing.Any], now: datetime.datetime
+) -> typing.Optional[str]:
+    """The out-of-date unit warning for a request address, if one applies."""
+    status = address.get("inmate_status")
+    if status == INMATE_CURRENT:
+        return None
+
+    fetched = address.get("datetime_fetched")
+    if not unit_is_stale(fetched, now):
+        return None
+
+    if status != INMATE_UNVERIFIED:
+        # An older backend that doesn't re-check with TDCJ.
+        return (
+            "Warning: this inmate's unit has not been checked in over "
+            f"{STALE_UNIT_AGE.days} days and may be out of date."
+        )
+
+    age = unit_age(fetched, now)
+    checked = (
+        "has never been checked"
+        if age is None
+        else f"was last checked {age.days} days ago"
+    )
+    return (
+        "Warning: couldn't re-check this inmate with TDCJ; their unit "
+        f"{checked} and may be out of date."
+    )
 
 
 def check_request_address(
@@ -150,8 +207,10 @@ def check_request_address(
 ) -> bool:
     """Warn about a request's address; return whether to go ahead and ship.
 
-    A stale unit only warns. A tossed request needs explicit confirmation,
-    since it normally should not be shipped at all.
+    An inmate TDCJ no longer lists is never shipped. A possibly out-of-date
+    unit only warns. A tossed request needs explicit confirmation, since it
+    normally should not be shipped at all. When this returns False it has
+    already told the volunteer that nothing was bought.
     """
     if now is None:
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -161,19 +220,32 @@ def check_request_address(
         style="fg:white",
     )
 
-    if unit_is_stale(address.get("datetime_fetched"), now):
-        questionary.print(
-            "  Warning: this inmate's unit has not been checked in over "
-            f"{STALE_UNIT_AGE.days} days and may be out of date.",
-            style="fg:yellow",
+    if address.get("inmate_status") == INMATE_NOT_LISTED:
+        logger.warning(
+            "TDCJ no longer lists %s (request %s); not shipping",
+            address["name"],
+            address.get("request_id"),
         )
+        questionary.print(
+            "  TDCJ no longer lists this inmate (they may have been released). "
+            "No postage bought; set this package aside.",
+            style="fg:red bold",
+        )
+        return False
+
+    warning = stale_unit_warning(address, now)
+    if warning:
+        questionary.print(f"  {warning}", style=WARNING_STYLE)
 
     if address.get("action") == "Tossed":
         questionary.print(
             "  Warning: this request is marked TOSSED, not filled.",
             style="fg:red bold",
         )
-        return console.confirm_tossed()
+        if console.confirm_tossed():
+            return True
+        questionary.print("  Skipped; no postage bought.", style=WARNING_STYLE)
+        return False
 
     return True
 
@@ -195,7 +267,6 @@ def generate_addresses_individual(config: Config):
             continue
 
         if not check_request_address(address):
-            questionary.print("  Skipped; no postage bought.", style="fg:yellow")
             continue
 
         to_addr = to_easypost_address(address["name"], address)
@@ -261,14 +332,18 @@ def warn_if_job_not_ok(shipment, result: PrintResult, log_dir: pathlib.Path) -> 
         return
     outcome = result.outcome.value
     detail = OUTCOME_DETAILS.get(outcome, f"the printer queue reported '{outcome}'")
+    logger.warning(
+        "label %s sent to %r but its outcome is %s; it may not have printed",
+        shipment_ref(shipment),
+        result.printer_name,
+        outcome,
+    )
     questionary.print(
         f"  Warning: the label was sent to {result.printer_name!r}, but {detail}. "
-        "It may NOT have printed.\n"
-        "  Check the printer before reprinting. Postage was already bought and was "
-        "NOT refunded; if no label came out, reprint or refund "
-        f"'{shipment_ref(shipment)}' from EasyPost.\n"
+        "It may not have printed.\n"
+        f"  {CREATE_AGAIN_ADVICE}\n"
         f"  Printer logs: {log_dir}",
-        style="fg:yellow",
+        style=WARNING_STYLE,
     )
 
 
@@ -285,12 +360,10 @@ def warn_print_raised(shipment, exc: Exception, log_dir: pathlib.Path) -> None:
     )
     questionary.print(
         f"  Warning: printing failed unexpectedly ({exc}), after the label may "
-        "already have reached the printer. It may or may NOT have printed.\n"
-        "  Check the printer before reprinting. Postage was NOT refunded; if no "
-        f"label came out, reprint or refund '{shipment_ref(shipment)}' from "
-        "EasyPost.\n"
+        "already have reached the printer. It may not have printed.\n"
+        f"  {CREATE_AGAIN_ADVICE}\n"
         f"  Printer logs: {log_dir}",
-        style="fg:yellow",
+        style=WARNING_STYLE,
     )
 
 
@@ -304,41 +377,6 @@ def request_refund_on_error(easypost_client, shipment):
             easypost_client.shipment.refund(shipment.id)
         labels.update_status(shipment, labels.STATUS_REFUNDED)
         raise
-
-
-def confirm_not_duplicate(identity: labels.LabelIdentity) -> bool:
-    """Stop before buying postage when this recipient already has a label.
-
-    Returns True to go ahead. Every flow (individual, bulk, manual) asks; the
-    default answer is No, which skips this shipment. The journal being
-    unavailable never blocks shipping.
-    """
-    records = labels.find_duplicates(identity)
-    if not records:
-        return True
-
-    trackings = ", ".join(str(record.tracking_code) for record in records)
-    questionary.print(
-        "  POSSIBLE DUPLICATE LABEL - postage for this recipient was already bought",
-        style=BANNER_STYLE,
-    )
-    answer = questionary.confirm(
-        labels.duplicate_question(records), default=False
-    ).ask()
-    create = answer is True
-    logger.warning(
-        "possible duplicate label for %s (existing: %s): volunteer chose %s",
-        identity.recipient_label,
-        trackings,
-        "to create another label" if create else "NOT to create another label",
-    )
-    if not create:
-        questionary.print(
-            f"  Skipped: no label created for {identity.recipient_label} "
-            f"(already has tracking {trackings}).",
-            style=WARNING_STYLE,
-        )
-    return create
 
 
 def check_printer_before_purchase() -> bool:
@@ -362,11 +400,7 @@ def report_pending_labels() -> None:
     """One-line notice of labels that are bought but not printed yet."""
     count = len(labels.pending_labels())
     if count:
-        questionary.print(
-            f"  {count} label(s) waiting to print (already bought: do NOT "
-            "create them again)",
-            style=BANNER_STYLE,
-        )
+        questionary.print(f"  {count} label(s) waiting to print", style=WARNING_STYLE)
 
 
 def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
@@ -378,23 +412,21 @@ def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
     return image
 
 
-def print_label(shipment, image: Image.Image, log_dir: pathlib.Path) -> PrintResult:
+def print_label(shipment, image: Image.Image) -> PrintResult:
     """Print the label on the best usable label printer.
+
+    A failure is reported by the caller (the label is saved for the watcher,
+    or may have printed), so nothing is shown here beyond the progress line.
 
     Raises:
         ibp_printing.PrintError: if the label definitely reached no printer.
     """
-    try:
-        with console.task_message("Printing postage"):
-            return print_to_first_available(
-                image,
-                job_name=f"Shipping Label {shipment.id}",
-                track_timeout_s=PRINT_TRACK_TIMEOUT_S,
-            )
-    except Exception as exc:
-        questionary.print(f"  Error: {exc}", style="fg:red")
-        questionary.print(f"  Printer logs: {log_dir}", style="fg:red")
-        raise
+    with console.task_message("Printing postage"):
+        return print_to_first_available(
+            image,
+            job_name=f"Shipping Label {shipment.id}",
+            track_timeout_s=PRINT_TRACK_TIMEOUT_S,
+        )
 
 
 def save_unprinted_label(
@@ -426,32 +458,18 @@ def report_saved_label(
     log_dir: pathlib.Path,
     identity: labels.LabelIdentity | None = None,
 ) -> None:
-    """Tell the volunteer the label was saved and postage was kept."""
+    """Tell the volunteer the label was saved and will print by itself."""
+    logger.warning(
+        "label %s did not print (%s); saved to %s", shipment_ref(shipment), error, path
+    )
     recipient = identity.recipient_label if identity else "this recipient"
-    banner = [
-        "LABEL QUEUED - DO NOT CREATE IT AGAIN",
-        f"Recipient: {recipient}",
-        f"Tracking:  {shipment_ref(shipment)}",
-        "It will print automatically when the printer works.",
-        "Do NOT create this label again.",
-    ]
-    width = max(len(line) for line in banner) + 4
-    questionary.print("")
-    for line in banner:
-        questionary.print(f"  {('  ' + line).ljust(width)}", style=BANNER_STYLE)
     questionary.print(
-        f"  The label did NOT print: {error}\n"
-        f"  It was saved to: {path}\n"
-        "  If the IBP label watcher is running, it will print automatically as "
-        "soon as a label printer is working.\n"
-        "  Postage was NOT refunded.\n"
-        "  Before you print that file by hand, or refund "
-        f"'{shipment_ref(shipment)}' in EasyPost, DELETE it from {path.parent} "
-        "first, so the label watcher does not print it too. If it is already "
-        "gone, the watcher has picked it up: check the printer (and the printed "
-        "and check-printer folders next to it) before doing either.\n"
+        "  The label didn't print. It was saved and will print automatically "
+        "when the printer is working.\n"
+        f"  Recipient: {recipient}\n"
+        f"  Tracking:  {shipment_ref(shipment)}\n"
         f"  Printer logs: {log_dir}",
-        style="fg:yellow",
+        style=WARNING_STYLE,
     )
 
 
@@ -561,22 +579,12 @@ def main():
     report_pending_labels()
 
     for to_addr_dict, weight, small_box in args.generate_addresses(config):
-        # Before anything is bought: is a label for this recipient already
-        # queued, waiting at the printer, or recently made?
         identity = labels.identity_for(to_addr_dict)
-        if not confirm_not_duplicate(identity):
-            continue
 
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
-
-        try:
-            with console.task_message("Verifying address"):
-                easypost_client.address.verify(to_addr.id)
-        except easypost.errors.InvalidRequestError:
-            questionary.print(
-                "  Failed to verify address, consider double-checking before shipping.",
-                style="fg:yellow",
-            )
+        verify_address(
+            easypost_client, to_addr, typed=args.shipping_type in TYPED_ADDRESS_MODES
+        )
 
         weight = 16.0 * weight  # Convert to ounces.
 
@@ -601,6 +609,34 @@ def main():
             journal=(identity, record),
         )
         report_pending_labels()
+
+
+def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
+    """Check a recipient address with EasyPost; a failure never blocks shipping.
+
+    Only a typed address (``typed``, manual mode) is something the volunteer
+    can double-check, so only then is the check shown. Addresses from the IBP
+    server (individual and bulk) are checked quietly and a failure is logged.
+    """
+    progress = (
+        console.task_message("Verifying address") if typed else contextlib.nullcontext()
+    )
+    try:
+        with progress:
+            easypost_client.address.verify(to_addr.id)
+    except easypost.errors.InvalidRequestError as exc:
+        logger.warning(
+            "could not verify %s address %s: %s",
+            "typed" if typed else "IBP server",
+            to_addr.id,
+            exc,
+        )
+        if typed:
+            questionary.print(
+                "  Failed to verify address, consider double-checking before "
+                "shipping.",
+                style=WARNING_STYLE,
+            )
 
 
 def purchase_postage(  # pylint: disable=too-many-arguments
@@ -654,7 +690,7 @@ def ship_label(  # pylint: disable=too-many-arguments
             return
 
     try:
-        result = print_label(shipment, image, log_dir)
+        result = print_label(shipment, image)
     except PrintError as error:
         # The label definitely reached no printer. Keep the postage and queue
         # the label for the label watcher; refund only if the label cannot even

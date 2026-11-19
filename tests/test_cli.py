@@ -4,6 +4,7 @@ import datetime
 import sys
 from unittest import mock
 
+import easypost  # type: ignore
 import pytest
 
 from shippy import cli
@@ -112,7 +113,7 @@ def test_individual_tossed_declined_skips(http, config, printed):
     ask.assert_called_once()
     text = printed_text(printed)
     assert "TOSSED" in text
-    assert "no postage bought" in text
+    assert text.count("Skipped; no postage bought.") == 1
 
 
 def test_individual_tossed_confirmed_ships(http, config, printed):
@@ -140,10 +141,79 @@ def test_unit_is_stale(fetched, stale):
 
 
 def test_stale_unit_warns_without_blocking(printed):
-    """A stale unit prints a warning but still ships."""
+    """A stale unit (older backend, no inmate_status) warns but still ships."""
     address = request_address(datetime_fetched=None)
     assert cli.check_request_address(address, now=NOW) is True
-    assert "may be out of date" in printed_text(printed)
+    assert (
+        "Warning: this inmate's unit has not been checked in over 90 days and may "
+        "be out of date." in printed_text(printed)
+    )
+
+
+def test_current_inmate_never_warns_about_unit(printed):
+    """The backend just re-checked the inmate with TDCJ: no unit-age warning."""
+    address = request_address(inmate_status="current", datetime_fetched=None)
+    assert cli.check_request_address(address, now=NOW) is True
+    text = printed_text(printed)
+    assert "Warning" not in text
+    assert "out of date" not in text
+
+
+@pytest.mark.parametrize("action", ["Filled", "Tossed"])
+def test_not_listed_inmate_is_not_shipped(printed, action):
+    """TDCJ no longer lists the inmate: nothing is asked or bought."""
+    address = request_address(inmate_status="not_listed", action=action)
+    with mock.patch("shippy.cli.console.confirm_tossed") as ask:
+        assert cli.check_request_address(address, now=NOW) is False
+    ask.assert_not_called()
+    text = printed_text(printed)
+    assert (
+        "TDCJ no longer lists this inmate (they may have been released). "
+        "No postage bought; set this package aside." in text
+    )
+    assert text.lower().count("no postage bought") == 1
+
+
+def test_unverified_stale_unit_says_tdcj_was_not_reached(printed):
+    """The backend couldn't reach TDCJ and the unit is old: say how old."""
+    address = request_address(
+        inmate_status="unverified", datetime_fetched="2026-06-01T00:00:00+00:00"
+    )
+    assert cli.check_request_address(address, now=NOW) is True
+    assert (
+        "Warning: couldn't re-check this inmate with TDCJ; their unit was last "
+        "checked 122 days ago and may be out of date." in printed_text(printed)
+    )
+
+
+def test_unverified_never_fetched_unit(printed):
+    """An unverified inmate whose unit was never fetched still warns."""
+    address = request_address(inmate_status="unverified", datetime_fetched=None)
+    assert cli.check_request_address(address, now=NOW) is True
+    assert "their unit has never been checked" in printed_text(printed)
+
+
+def test_unverified_fresh_unit_does_not_warn(printed):
+    """TDCJ unreachable but the unit was checked recently: no warning."""
+    address = request_address(
+        inmate_status="unverified", datetime_fetched="2026-09-01T00:00:00+00:00"
+    )
+    assert cli.check_request_address(address, now=NOW) is True
+    assert "Warning" not in printed_text(printed)
+
+
+def test_individual_not_listed_skips_to_next_label(http, config, printed):
+    """A released inmate's label is skipped once; the next label ships."""
+    http.add(
+        "inmates/by-request/1/address", request_address(inmate_status="not_listed")
+    )
+    http.add("inmates/by-request/98765/address", request_address())
+    (to_addr, _, _), ask = run_individual(config, [1, 98765])
+    assert to_addr == EXPECTED_INMATE_ADDRESS
+    ask.assert_not_called()
+    text = printed_text(printed)
+    assert "TDCJ no longer lists this inmate" in text
+    assert text.lower().count("no postage bought") == 1
 
 
 def test_bulk_uses_server_recipient_name(http, config, printed):
@@ -211,3 +281,26 @@ def test_main_return_address_from_shipping_settings(http, tmp_path, printed):
         client.return_value, **SHIPPING_SETTINGS["return_address"]
     )
     assert printed.called
+
+
+@pytest.mark.parametrize("typed", [True, False])
+def test_verify_address_failure_shown_only_for_typed(printed, typed):
+    """Only a typed (manual) address that fails verification warns the volunteer."""
+    client = mock.Mock()
+    client.address.verify.side_effect = easypost.errors.InvalidRequestError("bad")
+    cli.verify_address(client, mock.Mock(id="adr_1"), typed=typed)
+    client.address.verify.assert_called_once_with("adr_1")
+    shown = "Failed to verify address" in printed_text(printed)
+    assert shown is typed
+
+
+def test_verify_address_success_is_quiet(printed):
+    """A verified address shows no warning."""
+    client = mock.Mock()
+    cli.verify_address(client, mock.Mock(id="adr_1"), typed=True)
+    assert "Failed to verify" not in printed_text(printed)
+
+
+def test_only_manual_mode_has_typed_addresses():
+    """Individual and bulk addresses come from the IBP server."""
+    assert cli.TYPED_ADDRESS_MODES == {"manual"}
