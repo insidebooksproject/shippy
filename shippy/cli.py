@@ -412,23 +412,21 @@ def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
     return image
 
 
-def print_label(shipment, image: Image.Image, log_dir: pathlib.Path) -> PrintResult:
+def print_label(shipment, image: Image.Image) -> PrintResult:
     """Print the label on the best usable label printer.
+
+    A failure is reported by the caller (the label is saved for the watcher,
+    or may have printed), so nothing is shown here beyond the progress line.
 
     Raises:
         ibp_printing.PrintError: if the label definitely reached no printer.
     """
-    try:
-        with console.task_message("Printing postage"):
-            return print_to_first_available(
-                image,
-                job_name=f"Shipping Label {shipment.id}",
-                track_timeout_s=PRINT_TRACK_TIMEOUT_S,
-            )
-    except Exception as exc:
-        questionary.print(f"  Error: {exc}", style="fg:red")
-        questionary.print(f"  Printer logs: {log_dir}", style="fg:red")
-        raise
+    with console.task_message("Printing postage"):
+        return print_to_first_available(
+            image,
+            job_name=f"Shipping Label {shipment.id}",
+            track_timeout_s=PRINT_TRACK_TIMEOUT_S,
+        )
 
 
 def save_unprinted_label(
@@ -692,7 +690,7 @@ def ship_label(  # pylint: disable=too-many-arguments
             return
 
     try:
-        result = print_label(shipment, image, log_dir)
+        result = print_label(shipment, image)
     except PrintError as error:
         # The label definitely reached no printer. Keep the postage and queue
         # the label for the label watcher; refund only if the label cannot even
