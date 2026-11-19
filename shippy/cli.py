@@ -43,6 +43,9 @@ DIAG_LOG_APP_NAME = "diag"
 
 logger = get_logger("shippy")
 
+# Shipping modes where the volunteer types the address (and so can fix it).
+TYPED_ADDRESS_MODES = frozenset({"manual"})
+
 # Volunteer-facing style for warnings and notices.
 WARNING_STYLE = "fg:yellow"
 
@@ -519,15 +522,9 @@ def main():
         identity = labels.identity_for(to_addr_dict)
 
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
-
-        try:
-            with console.task_message("Verifying address"):
-                easypost_client.address.verify(to_addr.id)
-        except easypost.errors.InvalidRequestError:
-            questionary.print(
-                "  Failed to verify address, consider double-checking before shipping.",
-                style="fg:yellow",
-            )
+        verify_address(
+            easypost_client, to_addr, typed=args.shipping_type in TYPED_ADDRESS_MODES
+        )
 
         weight = 16.0 * weight  # Convert to ounces.
 
@@ -552,6 +549,34 @@ def main():
             journal=(identity, record),
         )
         report_pending_labels()
+
+
+def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
+    """Check a recipient address with EasyPost; a failure never blocks shipping.
+
+    Only a typed address (``typed``, manual mode) is something the volunteer
+    can double-check, so only then is the check shown. Addresses from the IBP
+    server (individual and bulk) are checked quietly and a failure is logged.
+    """
+    progress = (
+        console.task_message("Verifying address") if typed else contextlib.nullcontext()
+    )
+    try:
+        with progress:
+            easypost_client.address.verify(to_addr.id)
+    except easypost.errors.InvalidRequestError as exc:
+        logger.warning(
+            "could not verify %s address %s: %s",
+            "typed" if typed else "IBP server",
+            to_addr.id,
+            exc,
+        )
+        if typed:
+            questionary.print(
+                "  Failed to verify address, consider double-checking before "
+                "shipping.",
+                style=WARNING_STYLE,
+            )
 
 
 def purchase_postage(  # pylint: disable=too-many-arguments

@@ -7,6 +7,8 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
+import easypost  # type: ignore
+
 from shippy import cli, console
 
 BASE_CONFIG = """\
@@ -74,7 +76,6 @@ class MainLoopTests(unittest.TestCase):
             mock.patch.object(cli.labels, "record_purchase", return_value=None),
             mock.patch.object(cli, "report_pending_labels"),
             mock.patch.object(cli, "ship_label"),
-            mock.patch.object(cli.questionary, "print"),
             mock.patch.object(console.questionary, "print"),
             mock.patch.object(
                 console,
@@ -86,6 +87,9 @@ class MainLoopTests(unittest.TestCase):
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
+        printed = mock.patch.object(cli.questionary, "print")
+        self.printed = printed.start()
+        self.addCleanup(printed.stop)
         confirm = mock.patch.object(console.questionary, "confirm")
         self.confirm = confirm.start()
         self.addCleanup(confirm.stop)
@@ -108,6 +112,20 @@ class MainLoopTests(unittest.TestCase):
             ],
         )
         self.assertEqual(self.client.shipment.buy.call_count, 2)
+
+    def test_unverified_server_address_ships_without_warning(self):
+        """Bulk addresses come from the IBP server: a failed check is not shown."""
+        self.client.address.verify.side_effect = easypost.errors.InvalidRequestError(
+            "address not found"
+        )
+        with self.assertRaises(StopShipping):
+            cli.main()
+
+        # The return address once, then each of the two unit addresses.
+        self.assertEqual(self.client.address.verify.call_count, 3)
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
+        text = "\n".join(str(call.args[0]) for call in self.printed.call_args_list)
+        self.assertNotIn("Failed to verify address", text)
 
 
 class LoadConfigTests(unittest.TestCase):

@@ -4,6 +4,7 @@ import datetime
 import sys
 from unittest import mock
 
+import easypost  # type: ignore
 import pytest
 
 from shippy import cli
@@ -211,3 +212,26 @@ def test_main_return_address_from_shipping_settings(http, tmp_path, printed):
         client.return_value, **SHIPPING_SETTINGS["return_address"]
     )
     assert printed.called
+
+
+@pytest.mark.parametrize("typed", [True, False])
+def test_verify_address_failure_shown_only_for_typed(printed, typed):
+    """Only a typed (manual) address that fails verification warns the volunteer."""
+    client = mock.Mock()
+    client.address.verify.side_effect = easypost.errors.InvalidRequestError("bad")
+    cli.verify_address(client, mock.Mock(id="adr_1"), typed=typed)
+    client.address.verify.assert_called_once_with("adr_1")
+    shown = "Failed to verify address" in printed_text(printed)
+    assert shown is typed
+
+
+def test_verify_address_success_is_quiet(printed):
+    """A verified address shows no warning."""
+    client = mock.Mock()
+    cli.verify_address(client, mock.Mock(id="adr_1"), typed=True)
+    assert "Failed to verify" not in printed_text(printed)
+
+
+def test_only_manual_mode_has_typed_addresses():
+    """Individual and bulk addresses come from the IBP server."""
+    assert cli.TYPED_ADDRESS_MODES == {"manual"}
