@@ -306,41 +306,6 @@ def request_refund_on_error(easypost_client, shipment):
         raise
 
 
-def confirm_not_duplicate(identity: labels.LabelIdentity) -> bool:
-    """Stop before buying postage when this recipient already has a label.
-
-    Returns True to go ahead. Every flow (individual, bulk, manual) asks; the
-    default answer is No, which skips this shipment. The journal being
-    unavailable never blocks shipping.
-    """
-    records = labels.find_duplicates(identity)
-    if not records:
-        return True
-
-    trackings = ", ".join(str(record.tracking_code) for record in records)
-    questionary.print(
-        "  POSSIBLE DUPLICATE LABEL - postage for this recipient was already bought",
-        style=BANNER_STYLE,
-    )
-    answer = questionary.confirm(
-        labels.duplicate_question(records), default=False
-    ).ask()
-    create = answer is True
-    logger.warning(
-        "possible duplicate label for %s (existing: %s): volunteer chose %s",
-        identity.recipient_label,
-        trackings,
-        "to create another label" if create else "NOT to create another label",
-    )
-    if not create:
-        questionary.print(
-            f"  Skipped: no label created for {identity.recipient_label} "
-            f"(already has tracking {trackings}).",
-            style=WARNING_STYLE,
-        )
-    return create
-
-
 def check_printer_before_purchase() -> bool:
     """Make sure a label printer is ready (or skipped on purpose) before buying.
 
@@ -561,11 +526,7 @@ def main():
     report_pending_labels()
 
     for to_addr_dict, weight, small_box in args.generate_addresses(config):
-        # Before anything is bought: is a label for this recipient already
-        # queued, waiting at the printer, or recently made?
         identity = labels.identity_for(to_addr_dict)
-        if not confirm_not_duplicate(identity):
-            continue
 
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
 

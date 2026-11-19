@@ -71,7 +71,6 @@ class MainLoopTests(unittest.TestCase):
             mock.patch.object(cli.easypost, "EasyPostClient", return_value=self.client),
             mock.patch.object(cli.Server, "from_config", return_value=server),
             mock.patch.object(cli, "load_logo", return_value=None),
-            mock.patch.object(cli, "confirm_not_duplicate", return_value=True),
             mock.patch.object(cli.labels, "record_purchase", return_value=None),
             mock.patch.object(cli, "report_pending_labels"),
             mock.patch.object(cli, "ship_label"),
