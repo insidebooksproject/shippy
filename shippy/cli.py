@@ -121,6 +121,15 @@ def generate_addresses_bulk(config: Config):
 STALE_UNIT_AGE = datetime.timedelta(days=90)
 """How old an inmate's unit data can be before shippy warns it may be outdated."""
 
+# The backend's ``inmate_status`` on a request address: whether it just
+# re-checked the inmate with TDCJ. Older backends don't send it.
+INMATE_CURRENT = "current"
+"""Re-checked with TDCJ just now (or the data was fresh): ship normally."""
+INMATE_NOT_LISTED = "not_listed"
+"""TDCJ no longer lists the inmate (e.g. released): don't ship."""
+INMATE_UNVERIFIED = "unverified"
+"""TDCJ couldn't be reached; the stored unit was used."""
+
 
 def fetch_request_address(
     server: Server, request_id: typing.Union[typing.Tuple[str, int, int], int]
@@ -135,22 +144,61 @@ def fetch_request_address(
     return server.request_address(request_id)
 
 
-def unit_is_stale(
+def unit_age(
     datetime_fetched: typing.Optional[str], now: datetime.datetime
-) -> bool:
-    """Whether an inmate's unit was last fetched too long ago (or never)."""
+) -> typing.Optional[datetime.timedelta]:
+    """How long ago an inmate's unit was fetched; None if never (or unreadable)."""
     if not datetime_fetched:
-        return True
+        return None
 
     try:
         fetched = datetime.datetime.fromisoformat(datetime_fetched)
     except ValueError:
-        return True
+        return None
 
     if fetched.tzinfo is None:
         fetched = fetched.replace(tzinfo=datetime.timezone.utc)
 
-    return now - fetched > STALE_UNIT_AGE
+    return now - fetched
+
+
+def unit_is_stale(
+    datetime_fetched: typing.Optional[str], now: datetime.datetime
+) -> bool:
+    """Whether an inmate's unit was last fetched too long ago (or never)."""
+    age = unit_age(datetime_fetched, now)
+    return age is None or age > STALE_UNIT_AGE
+
+
+def stale_unit_warning(
+    address: dict[str, typing.Any], now: datetime.datetime
+) -> typing.Optional[str]:
+    """The out-of-date unit warning for a request address, if one applies."""
+    status = address.get("inmate_status")
+    if status == INMATE_CURRENT:
+        return None
+
+    fetched = address.get("datetime_fetched")
+    if not unit_is_stale(fetched, now):
+        return None
+
+    if status != INMATE_UNVERIFIED:
+        # An older backend that doesn't re-check with TDCJ.
+        return (
+            "Warning: this inmate's unit has not been checked in over "
+            f"{STALE_UNIT_AGE.days} days and may be out of date."
+        )
+
+    age = unit_age(fetched, now)
+    checked = (
+        "has never been checked"
+        if age is None
+        else f"was last checked {age.days} days ago"
+    )
+    return (
+        "Warning: couldn't re-check this inmate with TDCJ; their unit "
+        f"{checked} and may be out of date."
+    )
 
 
 def check_request_address(
@@ -159,8 +207,10 @@ def check_request_address(
 ) -> bool:
     """Warn about a request's address; return whether to go ahead and ship.
 
-    A stale unit only warns. A tossed request needs explicit confirmation,
-    since it normally should not be shipped at all.
+    An inmate TDCJ no longer lists is never shipped. A possibly out-of-date
+    unit only warns. A tossed request needs explicit confirmation, since it
+    normally should not be shipped at all. When this returns False it has
+    already told the volunteer that nothing was bought.
     """
     if now is None:
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -170,19 +220,32 @@ def check_request_address(
         style="fg:white",
     )
 
-    if unit_is_stale(address.get("datetime_fetched"), now):
-        questionary.print(
-            "  Warning: this inmate's unit has not been checked in over "
-            f"{STALE_UNIT_AGE.days} days and may be out of date.",
-            style="fg:yellow",
+    if address.get("inmate_status") == INMATE_NOT_LISTED:
+        logger.warning(
+            "TDCJ no longer lists %s (request %s); not shipping",
+            address["name"],
+            address.get("request_id"),
         )
+        questionary.print(
+            "  TDCJ no longer lists this inmate (they may have been released). "
+            "No postage bought; set this package aside.",
+            style="fg:red bold",
+        )
+        return False
+
+    warning = stale_unit_warning(address, now)
+    if warning:
+        questionary.print(f"  {warning}", style=WARNING_STYLE)
 
     if address.get("action") == "Tossed":
         questionary.print(
             "  Warning: this request is marked TOSSED, not filled.",
             style="fg:red bold",
         )
-        return console.confirm_tossed()
+        if console.confirm_tossed():
+            return True
+        questionary.print("  Skipped; no postage bought.", style=WARNING_STYLE)
+        return False
 
     return True
 
@@ -204,7 +267,6 @@ def generate_addresses_individual(config: Config):
             continue
 
         if not check_request_address(address):
-            questionary.print("  Skipped; no postage bought.", style="fg:yellow")
             continue
 
         to_addr = to_easypost_address(address["name"], address)

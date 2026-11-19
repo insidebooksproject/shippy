@@ -1,11 +1,20 @@
 """Tests for the IBP server client."""
 
+from unittest import mock
+
 import pytest
 import requests
 
+from shippy.models import IbpConfig
 from shippy.server import Server, ServerError, to_easypost_address
 
-from .conftest import BASE_URL, SHIPPING_SETTINGS, UNIT, request_address
+from .conftest import (
+    BASE_URL,
+    SHIPPING_SETTINGS,
+    UNIT,
+    make_response,
+    request_address,
+)
 
 
 @pytest.mark.parametrize("base", [BASE_URL, BASE_URL + "/"])
@@ -78,3 +87,14 @@ def test_return_address_from_shipping_settings(http):
 def test_to_easypost_address_blanks_null_street2():
     """A null street2 becomes an empty string for EasyPost."""
     assert to_easypost_address("X", UNIT)["street2"] == ""
+
+
+def test_address_request_timeout_allows_a_tdcj_lookup():
+    """The backend may query TDCJ (up to ~5 s) before answering an address."""
+    server = Server.from_config(IbpConfig.model_validate({"url": BASE_URL}))
+    with mock.patch(
+        "shippy.server.requests.get",
+        return_value=make_response(200, request_address()),
+    ) as get:
+        server.inmate_request_address("TEX", 12345, 0)
+    assert get.call_args.kwargs["timeout"] >= 15
