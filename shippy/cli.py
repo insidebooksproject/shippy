@@ -43,9 +43,15 @@ DIAG_LOG_APP_NAME = "diag"
 
 logger = get_logger("shippy")
 
-# Volunteer-facing styles: warnings, and the "do not create it again" banner.
+# Volunteer-facing style for warnings and notices.
 WARNING_STYLE = "fg:yellow"
-BANNER_STYLE = "bold fg:ansiblack bg:ansiyellow"
+
+# What to do when a label may not have printed. Unused labels are refunded
+# automatically (a weekly job on the IBP server), so a second label is cheap.
+CREATE_AGAIN_ADVICE = (
+    "Check the printer. If no label came out, create it again; the unused one "
+    "is refunded automatically."
+)
 
 # Outcomes whose raw value reads badly after "the printer queue reported".
 OUTCOME_DETAILS = {
@@ -261,14 +267,18 @@ def warn_if_job_not_ok(shipment, result: PrintResult, log_dir: pathlib.Path) -> 
         return
     outcome = result.outcome.value
     detail = OUTCOME_DETAILS.get(outcome, f"the printer queue reported '{outcome}'")
+    logger.warning(
+        "label %s sent to %r but its outcome is %s; it may not have printed",
+        shipment_ref(shipment),
+        result.printer_name,
+        outcome,
+    )
     questionary.print(
         f"  Warning: the label was sent to {result.printer_name!r}, but {detail}. "
-        "It may NOT have printed.\n"
-        "  Check the printer before reprinting. Postage was already bought and was "
-        "NOT refunded; if no label came out, reprint or refund "
-        f"'{shipment_ref(shipment)}' from EasyPost.\n"
+        "It may not have printed.\n"
+        f"  {CREATE_AGAIN_ADVICE}\n"
         f"  Printer logs: {log_dir}",
-        style="fg:yellow",
+        style=WARNING_STYLE,
     )
 
 
@@ -285,12 +295,10 @@ def warn_print_raised(shipment, exc: Exception, log_dir: pathlib.Path) -> None:
     )
     questionary.print(
         f"  Warning: printing failed unexpectedly ({exc}), after the label may "
-        "already have reached the printer. It may or may NOT have printed.\n"
-        "  Check the printer before reprinting. Postage was NOT refunded; if no "
-        f"label came out, reprint or refund '{shipment_ref(shipment)}' from "
-        "EasyPost.\n"
+        "already have reached the printer. It may not have printed.\n"
+        f"  {CREATE_AGAIN_ADVICE}\n"
         f"  Printer logs: {log_dir}",
-        style="fg:yellow",
+        style=WARNING_STYLE,
     )
 
 
@@ -327,11 +335,7 @@ def report_pending_labels() -> None:
     """One-line notice of labels that are bought but not printed yet."""
     count = len(labels.pending_labels())
     if count:
-        questionary.print(
-            f"  {count} label(s) waiting to print (already bought: do NOT "
-            "create them again)",
-            style=BANNER_STYLE,
-        )
+        questionary.print(f"  {count} label(s) waiting to print", style=WARNING_STYLE)
 
 
 def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
@@ -391,32 +395,18 @@ def report_saved_label(
     log_dir: pathlib.Path,
     identity: labels.LabelIdentity | None = None,
 ) -> None:
-    """Tell the volunteer the label was saved and postage was kept."""
+    """Tell the volunteer the label was saved and will print by itself."""
+    logger.warning(
+        "label %s did not print (%s); saved to %s", shipment_ref(shipment), error, path
+    )
     recipient = identity.recipient_label if identity else "this recipient"
-    banner = [
-        "LABEL QUEUED - DO NOT CREATE IT AGAIN",
-        f"Recipient: {recipient}",
-        f"Tracking:  {shipment_ref(shipment)}",
-        "It will print automatically when the printer works.",
-        "Do NOT create this label again.",
-    ]
-    width = max(len(line) for line in banner) + 4
-    questionary.print("")
-    for line in banner:
-        questionary.print(f"  {('  ' + line).ljust(width)}", style=BANNER_STYLE)
     questionary.print(
-        f"  The label did NOT print: {error}\n"
-        f"  It was saved to: {path}\n"
-        "  If the IBP label watcher is running, it will print automatically as "
-        "soon as a label printer is working.\n"
-        "  Postage was NOT refunded.\n"
-        "  Before you print that file by hand, or refund "
-        f"'{shipment_ref(shipment)}' in EasyPost, DELETE it from {path.parent} "
-        "first, so the label watcher does not print it too. If it is already "
-        "gone, the watcher has picked it up: check the printer (and the printed "
-        "and check-printer folders next to it) before doing either.\n"
+        "  The label didn't print. It was saved and will print automatically "
+        "when the printer is working.\n"
+        f"  Recipient: {recipient}\n"
+        f"  Tracking:  {shipment_ref(shipment)}\n"
         f"  Printer logs: {log_dir}",
-        style="fg:yellow",
+        style=WARNING_STYLE,
     )
 
 
