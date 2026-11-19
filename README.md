@@ -84,13 +84,28 @@ shippy --config path/to/your/config.ini <shipping_type>
 Replace `<shipping_type>` with one of the following commands:
 
 - `individual`: For shipping individual packages. Scan the request label
-  (new `TEX-12345678-0` style or a legacy number). shippy warns if the
-  inmate's unit may be out of date, and asks for confirmation before buying
-  postage for a request marked tossed. It doesn't ask about box size: every
-  individual package is declared as the small box (12x12x12, one cubic foot),
-  so pack individual requests in boxes no bigger than that.
+  (new `TEX-12345678-0` style or a legacy number). The IBP server re-checks
+  the inmate with TDCJ and says how that went (`inmate_status` on the
+  address):
+  - `current`: shippy ships normally.
+  - `not_listed` (TDCJ no longer lists the inmate, e.g. released): shippy
+    buys nothing and asks nothing; it says to set the package aside.
+  - `unverified` (TDCJ couldn't be reached), or a server too old to send the
+    field: shippy warns if the inmate's unit was last checked over 90 days
+    ago and may be out of date, but still ships.
+
+  shippy asks for confirmation (default No) before buying postage for a
+  request marked tossed. It doesn't ask about box size: every individual
+  package is declared as the small box (12x12x12, one cubic foot), so pack
+  individual requests in boxes no bigger than that.
 - `bulk`: For shipping bulk packages.
 - `manual`: For manually entering address details.
+
+Every recipient address is checked with EasyPost before buying, and a
+failed check never stops shipping. Only in `manual` mode, where the
+volunteer typed the address, does shippy show "Failed to verify address,
+consider double-checking before shipping."; `individual` and `bulk`
+addresses come from the IBP server, so a failed check there is only logged.
 
 **Example:**
 
@@ -136,33 +151,36 @@ spooling, shippy follows the job for up to 30 seconds.
 
 ### When a label does not print
 
+Unused labels are refunded automatically: a weekly job on the IBP server
+refunds every label USPS never scanned (EasyPost allows this within 30 days
+of purchase). So shippy doesn't stop volunteers over an occasional extra
+label, and never sends them to EasyPost to refund one.
+
 What shippy does once postage has been bought:
 
 - **The label could not be downloaded or prepared** (no label image exists):
-  the postage is refunded automatically.
+  the postage is refunded right away.
 - **No printer could take the label** (no label printer plugged in, or every
-  printer failed before the job was sent): the postage is **not** refunded.
-  The label, with the IBP logo, is saved to the print queue folder
-  `Downloads\to-print\` and shippy prints the exact path. If the IBP label
-  watcher (from ibp-printing) is running, it prints the label automatically as
-  soon as a label printer is working. **Before** you print that file by hand,
-  or refund the shipment in EasyPost (shippy shows its tracking code) because
-  the package will not ship, delete the file from `to-print\` first, so the
-  watcher does not print it too. If the file is already gone, the watcher has
-  picked it up: check the printer (and the `printed\` and `check-printer\`
-  folders) first. shippy shows this in a highlighted **LABEL QUEUED - DO NOT
-  CREATE IT AGAIN** block with the recipient and tracking code: the label will
-  print automatically when the printer works, so **do not create it again**.
-  shippy then carries on with the next package. Only if the
-  label cannot even be saved is the postage refunded (shippy says so).
+  printer failed before the job was sent): the label, with the IBP logo, is
+  saved to the print queue folder `Downloads\to-print\`, and the IBP label
+  watcher (from ibp-printing) prints it as soon as a label printer is working.
+  shippy says:
+
+  ```
+  The label didn't print. It was saved and will print automatically when the printer is working.
+  Recipient: Jane Doe #00012345, Rt 2 Box 4400, Gatesville, TX
+  Tracking:  9400...
+  Printer logs: ...
+  ```
+
+  and carries on with the next package. Only if the label cannot even be
+  saved is the postage refunded right away (shippy says so).
 - **The label was sent to a printer but the queue reported a problem**, or it
-  could not be confirmed that the job reached the printer: the postage is
-  **not** refunded and the label is **not** queued again, because it may well
-  still print. shippy warns you with the shipment's tracking code; check the
-  printer before reprinting so you do not end up with two labels.
-- **Printing failed with an unexpected error** (anything other than "no
-  printer could take it"): shippy cannot tell whether the job reached the
-  printer, so it treats it the same way: warning, no refund, nothing queued.
+  could not be confirmed that the job reached the printer, or printing failed
+  with an unexpected error: the label may well still print, so it is neither
+  refunded nor queued again. shippy warns that it may not have printed and
+  says: "Check the printer. If no label came out, create it again; the unused
+  one is refunded automatically."
 
 ### Labels that were already bought
 
@@ -170,27 +188,10 @@ Every label shippy buys is recorded in the label journal shared with
 shippy-gui and the IBP label watcher (`labels.jsonl` in
 `%LOCALAPPDATA%\ibp-printing`, `~/.local/state/ibp-printing` on Linux), with
 what happened to it: printed, queued in `to-print\`, waiting at the printer
-(check printer) or refunded.
-
-- **Before buying postage** (in every mode: individual, bulk and manual),
-  shippy looks up the recipient's address. If a label for them is still
-  queued or waiting at the printer, or was bought or printed in the last 12
-  hours, it asks, for example:
-
-  ```
-  A label for Jane Doe, 123 Prison Rd, Huntsville, TX is already queued — it
-  will print automatically when the printer works (tracking 9400...). Create
-  another label anyway? (y/N)
-  ```
-
-  (or "waiting at the printer: check the printer before reprinting", or
-  "printed at HH:MM"). The default is **No**: the shipment is skipped, nothing
-  is bought, and shippy prints `Skipped: no label created for ...`. In bulk
-  mode this means a second box to the same unit within 12 hours needs an
-  explicit `y`. The answer is logged.
-- **At startup and after each shipment**, shippy prints
-  `N label(s) waiting to print (already bought: do NOT create them again)`
-  when labels are queued or waiting at the printer.
+(check printer) or refunded. At startup and after each shipment, shippy
+prints `N label(s) waiting to print` when labels are queued or waiting at
+the printer. shippy doesn't ask about possible duplicates: shipping several
+boxes to one unit is normal, and an unused label is refunded automatically.
 
 ### Development: `--preview`
 
