@@ -3,6 +3,7 @@
 import datetime
 import sys
 from unittest import mock
+from urllib.parse import quote
 
 import easypost  # type: ignore
 import pytest
@@ -65,7 +66,7 @@ def run_individual(config, request_ids, weights=(3,), confirm=False):
 def test_individual_always_declares_small_box(http, config, weight):
     """Individual mode declares the small box at any weight, without asking."""
     http.add("inmates/by-request/98765/address", request_address())
-    (_, got_weight, small_box), _ = run_individual(config, [98765], weights=[weight])
+    (_, got_weight, small_box, _), _ = run_individual(config, [98765], weights=[weight])
     assert got_weight == weight
     assert small_box is True
 
@@ -73,7 +74,7 @@ def test_individual_always_declares_small_box(http, config, weight):
 def test_individual_legacy_barcode(http, config, printed):
     """A legacy integer label is addressed via the by-request endpoint."""
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, weight, _), ask = run_individual(config, [98765])
+    (to_addr, weight, _, _), ask = run_individual(config, [98765])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     assert weight == 3
     assert http.calls == [f"{BASE_URL}/inmates/by-request/98765/address"]
@@ -85,7 +86,7 @@ def test_individual_new_barcode_passes_request_index(http, config, printed):
     """A TEX-ID-INDEX label uses the request-index address endpoint."""
     path = "inmates/Texas/12345/requests/4/address"
     http.add(path, request_address(request_index=4))
-    (to_addr, _, _), _ = run_individual(config, [("TEX", 12345, 4)])
+    (to_addr, _, _, _), _ = run_individual(config, [("TEX", 12345, 4)])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     assert http.calls == [f"{BASE_URL}/{path}"]
     assert "Warning" not in printed_text(printed)
@@ -99,7 +100,7 @@ def test_individual_server_error_skips_to_next_label(
     detail = "Texas inmate #00012345 is not assigned to a unit; cannot address"
     http.add("inmates/by-request/1/address", {"detail": detail}, status_code)
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, _, _), _ = run_individual(config, [1, 98765])
+    (to_addr, _, _, _), _ = run_individual(config, [1, 98765])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     assert detail in printed_text(printed)
 
@@ -108,7 +109,7 @@ def test_individual_tossed_declined_skips(http, config, printed):
     """Declining a tossed request buys nothing and moves to the next label."""
     http.add("inmates/by-request/1/address", request_address(action="Tossed"))
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, _, _), ask = run_individual(config, [1, 98765], confirm=False)
+    (to_addr, _, _, _), ask = run_individual(config, [1, 98765], confirm=False)
     assert to_addr == EXPECTED_INMATE_ADDRESS
     ask.assert_called_once()
     text = printed_text(printed)
@@ -119,7 +120,7 @@ def test_individual_tossed_declined_skips(http, config, printed):
 def test_individual_tossed_confirmed_ships(http, config, printed):
     """Confirming a tossed request lets it ship."""
     http.add("inmates/by-request/1/address", request_address(action="Tossed"))
-    (to_addr, _, _), ask = run_individual(config, [1], confirm=True)
+    (to_addr, _, _, _), ask = run_individual(config, [1], confirm=True)
     assert to_addr == EXPECTED_INMATE_ADDRESS
     ask.assert_called_once()
     assert "TOSSED" in printed_text(printed)
@@ -208,7 +209,7 @@ def test_individual_not_listed_skips_to_next_label(http, config, printed):
         "inmates/by-request/1/address", request_address(inmate_status="not_listed")
     )
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, _, _), ask = run_individual(config, [1, 98765])
+    (to_addr, _, _, _), ask = run_individual(config, [1, 98765])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     ask.assert_not_called()
     text = printed_text(printed)
@@ -230,7 +231,7 @@ def test_bulk_uses_server_recipient_name(http, config, printed):
         mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
         mock.patch("shippy.cli.console.query_small_box", return_value=False),
     ):
-        to_addr, weight, _ = next(cli.generate_addresses_bulk(config))
+        to_addr, weight, _, _ = next(cli.generate_addresses_bulk(config))
 
     assert set(query_unit.call_args.args[0]) == {"HUGHES (TEXAS)", "HUGHES (FEDERAL)"}
     assert to_addr == dict(EXPECTED_INMATE_ADDRESS, name="ATTN: MAILROOM STAFF")
@@ -250,10 +251,69 @@ def test_bulk_unit_not_found_skips(http, config, printed):
         mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
         mock.patch("shippy.cli.console.query_small_box", return_value=False),
     ):
-        to_addr, _, _ = next(cli.generate_addresses_bulk(config))
+        to_addr, _, _, _ = next(cli.generate_addresses_bulk(config))
 
     assert to_addr["name"] == "ATTN: MAILROOM STAFF"
     assert "Unit not found." in printed_text(printed)
+
+
+def test_individual_scanned_code_tags_shipment_with_request_code(http, config):
+    """A scanned TEX- label tags the shipment with the server's request code."""
+    path = "inmates/Texas/12345/requests/2/address"
+    http.add(path, request_address(request_index=2, code="TEX-00012345-2"))
+    (_, _, _, reference), _ = run_individual(config, [("TEX", 12345, 2)])
+    assert reference == "ibp1:req:TEX-00012345-2"
+
+
+def test_individual_legacy_id_tags_shipment_with_server_code(http, config):
+    """A typed legacy request id still tags with the canonical request code."""
+    http.add("inmates/by-request/98765/address", request_address(code="TEX-00012345-1"))
+    (_, _, _, reference), _ = run_individual(config, [98765])
+    assert reference == "ibp1:req:TEX-00012345-1"
+
+
+def test_individual_without_server_code_tags_shipment_manual(http, config):
+    """An older server sends no request code: tag as manual, never invent one."""
+    body = request_address()
+    del body["code"]
+    http.add("inmates/by-request/98765/address", body)
+    (to_addr, _, _, reference), _ = run_individual(config, [98765])
+    assert reference == "ibp1:manual"
+    assert to_addr == EXPECTED_INMATE_ADDRESS
+
+
+def test_bulk_tags_shipment_with_unit_name_unchanged(http, config):
+    """A bulk box is tagged with the unit's jurisdiction and name as given."""
+    unit = dict(UNIT, name="Coyote's Bend St. Jail")
+    http.add("shipping-settings", SHIPPING_SETTINGS)
+    http.add("units", [unit])
+    http.add(f"units/Texas/{quote(unit['name'], safe='')}", unit)
+
+    with (
+        mock.patch(
+            "shippy.cli.console.query_unit", side_effect=["COYOTE'S BEND ST. JAIL"]
+        ),
+        mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
+        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+    ):
+        _, _, _, reference = next(cli.generate_addresses_bulk(config))
+
+    assert reference == "ibp1:unit:Texas:Coyote's Bend St. Jail"
+
+
+def test_manual_tags_shipment_manual(config):
+    """A typed address is tagged as manual."""
+    typed = dict(EXPECTED_INMATE_ADDRESS, name="Pat Example")
+    with (
+        mock.patch("shippy.cli.googlemaps.Client"),
+        mock.patch("shippy.cli.console.query_address", return_value=typed),
+        mock.patch("shippy.cli.console.query_weight", return_value=2),
+        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+    ):
+        to_addr, _, _, reference = next(cli.generate_addresses_manual(config))
+
+    assert to_addr == typed
+    assert reference == "ibp1:manual"
 
 
 def test_main_return_address_from_shipping_settings(http, tmp_path, printed):

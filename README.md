@@ -107,6 +107,14 @@ volunteer typed the address, does shippy show "Failed to verify address,
 consider double-checking before shipping."; `individual` and `bulk`
 addresses come from the IBP server, so a failed check there is only logged.
 
+Each EasyPost shipment's `reference` records what the label was bought for,
+so the IBP server can match labels to requests: `ibp1:req:<request code>`
+(`individual`, with the code the server returned, e.g.
+`ibp1:req:TEX-00012345-2`), `ibp1:unit:<jurisdiction>:<unit name>` (`bulk`,
+e.g. `ibp1:unit:Texas:BETO`), or `ibp1:manual` (`manual`, an older server
+that sends no request code, or anything unexpected). It is built from data
+already in hand and never stops a purchase.
+
 **Example:**
 
 ```
