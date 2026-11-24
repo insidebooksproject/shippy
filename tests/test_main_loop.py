@@ -113,6 +113,16 @@ class MainLoopTests(unittest.TestCase):
         )
         self.assertEqual(self.client.shipment.buy.call_count, 2)
 
+    def test_bulk_shipments_are_tagged_with_the_unit(self):
+        with self.assertRaises(StopShipping):
+            cli.main()
+
+        references = [
+            call.kwargs.get("reference")
+            for call in self.client.shipment.create.call_args_list
+        ]
+        self.assertEqual(references, ["ibp1:unit:Texas:Connally"] * 2)
+
     def test_unverified_server_address_ships_without_warning(self):
         """Bulk addresses come from the IBP server: a failed check is not shown."""
         self.client.address.verify.side_effect = easypost.errors.InvalidRequestError(

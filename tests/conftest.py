@@ -45,6 +45,7 @@ def request_address(**overrides: typing.Any) -> dict[str, typing.Any]:
         "datetime_fetched": "2099-01-01T00:00:00+00:00",
         "request_index": 0,
         "request_id": 98765,
+        "code": "TEX-00012345-0",
         "action": "Filled",
         "unit_name": "Hughes",
         "street1": "Rt 2 Box 4400",

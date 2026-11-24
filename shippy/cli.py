@@ -98,6 +98,7 @@ def generate_addresses_bulk(config: Config):
             continue
 
         jurisdiction, name = units[unit]
+        reference = shipping.unit_reference(jurisdiction, name)
         try:
             with console.task_message("Grabbing unit address from IBP server"):
                 unit_data = server.unit(jurisdiction, name)
@@ -115,7 +116,7 @@ def generate_addresses_bulk(config: Config):
         if small_box is None:
             continue
 
-        yield to_addr, weight, small_box
+        yield to_addr, weight, small_box, reference
 
 
 STALE_UNIT_AGE = datetime.timedelta(days=90)
@@ -270,6 +271,7 @@ def generate_addresses_individual(config: Config):
             continue
 
         to_addr = to_easypost_address(address["name"], address)
+        reference = shipping.request_reference(address)
 
         weight = console.query_weight()
         if weight is None:
@@ -278,7 +280,7 @@ def generate_addresses_individual(config: Config):
         # Individual packages always go in boxes of one cubic foot or less, so
         # declare the small box without asking; Ground Advantage then competes
         # with Library Mail on actual weight.
-        yield to_addr, weight, True
+        yield to_addr, weight, True, reference
 
 
 def generate_addresses_manual(config: Config):
@@ -298,7 +300,7 @@ def generate_addresses_manual(config: Config):
         if small_box is None:
             continue
 
-        yield to_addr, weight, small_box
+        yield to_addr, weight, small_box, shipping.MANUAL_REFERENCE
 
 
 def run_diagnose_printer(_args):
@@ -530,7 +532,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main():
+def main():  # pylint: disable=too-many-locals
     """Ship to an inmate or a unit."""
 
     parser = build_parser()
@@ -578,7 +580,7 @@ def main():
 
     report_pending_labels()
 
-    for to_addr_dict, weight, small_box in args.generate_addresses(config):
+    for to_addr_dict, weight, small_box, reference in args.generate_addresses(config):
         identity = labels.identity_for(to_addr_dict)
 
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
@@ -597,6 +599,7 @@ def main():
             to_addr,
             weight,
             config.parcel.dimensions(small_box),
+            reference=reference,
         )
         record = labels.record_purchase(identity, shipment)
 
@@ -640,12 +643,26 @@ def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
 
 
 def purchase_postage(  # pylint: disable=too-many-arguments
-    easypost_client, from_addr, to_addr, weight: float, dimensions
+    easypost_client,
+    from_addr,
+    to_addr,
+    weight: float,
+    dimensions,
+    *,
+    reference: typing.Optional[str] = None,
 ):
-    """Quote the package, show the rates being compared, then buy the cheapest."""
+    """Quote the package, show the rates being compared, then buy the cheapest.
+
+    ``reference`` tags the shipment with what it was bought for.
+    """
     with console.task_message("Getting rates"):
         quote = shipping.quote_shipment(
-            easypost_client, from_addr, to_addr, weight, dimensions
+            easypost_client,
+            from_addr,
+            to_addr,
+            weight,
+            dimensions,
+            reference=reference,
         )
     rate = shipping.cheapest_rate(quote)
     show_rate_summary(shipping.summarize_rates(quote.rates, rate))
