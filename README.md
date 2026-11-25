@@ -131,6 +131,16 @@ If several printers qualify, healthy, problem-free and default queues are tried
 first; if one fails before the job is spooled, the next one is tried. After
 spooling, shippy follows the job for up to 30 seconds.
 
+### No label printer
+
+At startup, and again before each purchase, shippy checks for a usable label
+printer. If there is none it shows `NO LABEL PRINTER FOUND` and carries on by
+itself as soon as a printer is ready. Pressing Enter continues without a
+printer (labels are then saved for the label watcher, below). Ctrl+C at
+startup quits shippy with exit status 130, so a launcher such as the kiosk's
+can tell it from a failure; before a purchase it cancels only that shipment,
+and no postage is bought. `--preview` skips this check.
+
 ### When a label does not print
 
 Unused labels are refunded automatically: a weekly job on the IBP server
@@ -189,9 +199,10 @@ Collect both after any printing incident.
 
 ## Troubleshooting the label printer
 
-If shipping fails with **"No label printer found plugged in"** even though the
-printer is powered and connected, run the `diagnose-printer` command to capture a
-snapshot of the printer and USB state. It needs no config file:
+If shippy shows **NO LABEL PRINTER FOUND**, or labels keep going to
+`to-print\`, even though the printer is powered and connected, run the
+`diagnose-printer` command to capture a snapshot of the printer and USB state.
+It needs no config file:
 
 ```
 shippy diagnose-printer
