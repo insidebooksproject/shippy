@@ -563,7 +563,10 @@ def main():  # pylint: disable=too-many-locals
         try:
             printer_gate.wait_for_printer(when="before purchase")
         except KeyboardInterrupt:
-            sys.exit(1)
+            # The volunteer chose to quit ("Press Ctrl+C to quit"). 130 is
+            # the usual status for that, so whatever started shippy (the
+            # ibp-kiosk launcher) can tell it from a failure.
+            sys.exit(130)
 
     with console.task_message("Grabbing return address from IBP server"):
         return_address = Server.from_config(config.ibp).return_address()
