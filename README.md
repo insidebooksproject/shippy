@@ -126,25 +126,25 @@ shippy --config config.ini individual
 You can also run the application directly from the git repository without a local installation using `uvx`. This is useful for running the tool in different environments.
 
 ```
-uvx --from git+https://github.com/jonkensta/shippy.git@main shippy --config path/to/your/config.ini <shipping_type>
+uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config path/to/your/config.ini <shipping_type>
 ```
 
 **Example:**
 
 ```
-uvx --from git+https://github.com/jonkensta/shippy.git@main shippy --config config.ini bulk
+uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config config.ini bulk
 ```
 
 To wrap the above in a powershell command, you can do the following:
 
 ```
-powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/jonkensta/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
+powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/insidebooksproject/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
 ```
 
 ## Label printers
 
 Printing is handled by the shared
-[`ibp-printing`](https://github.com/jonkensta/ibp-printing) library. On Windows a
+[`ibp-printing`](https://github.com/insidebooksproject/printing) library. On Windows a
 print queue is only used when **both** of these hold:
 
 1. The queue name ends in the printer's USB `VID:PID`, separated from the rest of
@@ -239,7 +239,7 @@ shippy diagnose-printer
 Or via `uvx`:
 
 ```
-uvx --from git+https://github.com/jonkensta/shippy.git@main shippy diagnose-printer
+uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy diagnose-printer
 ```
 
 Run it **while the problem is happening** and send back the output together with
