@@ -343,6 +343,30 @@ def test_main_return_address_from_shipping_settings(http, tmp_path, printed):
     assert printed.called
 
 
+def test_main_quit_at_printer_prompt_exits_130(tmp_path):
+    """Ctrl+C at the no-printer prompt is the volunteer quitting, not an error."""
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        f"[ibp]\nurl = {BASE_URL}\n\n"
+        "[easypost]\napikey = EZTK-test\n\n[googlemaps]\napikey = gmaps-test\n"
+    )
+
+    argv = ["shippy", "--config", str(config_path), "bulk"]
+    with (
+        mock.patch.object(sys, "argv", argv),
+        mock.patch("shippy.cli.easypost.EasyPostClient"),
+        mock.patch("shippy.cli.load_logo"),
+        mock.patch("shippy.cli.configure_logging"),
+        mock.patch(
+            "shippy.cli.printer_gate.wait_for_printer", side_effect=KeyboardInterrupt
+        ),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        cli.main()
+
+    assert excinfo.value.code == 130
+
+
 @pytest.mark.parametrize("typed", [True, False])
 def test_verify_address_failure_shown_only_for_typed(printed, typed):
     """Only a typed (manual) address that fails verification warns the volunteer."""
