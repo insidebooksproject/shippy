@@ -264,6 +264,13 @@ shippy --preview --config config.ini manual
 development, put an EasyPost **test** API key (from the EasyPost dashboard) in
 your config so no real postage is purchased.
 
+`ibp-printing` is pinned to a release tag of
+[printing](https://github.com/insidebooksproject/printing) in `pyproject.toml`
+(`[tool.uv.sources]`). To develop both together, temporarily point it at a
+checkout in `../printing` with `{ path = "../printing", editable = true }`.
+Tag and push a new ibp-printing release before pinning it here, or the
+stations fail to install shippy.
+
 ### Releasing
 
 `main` and `deploy` stay at the same tip. Merge feature branches straight
