@@ -18,7 +18,7 @@ Inside Books Project is an Austin-based community service volunteer organization
 
 ## Configuration
 
-shippy needs a configuration file for the IBP server and the EasyPost API.
+shippy needs a configuration file for the IBP server, EasyPost and Google Maps.
 
 1.  Create a `config.ini` file (see `sample.ini` for a full example).
 2.  Populate it with your API keys and the server URL:
