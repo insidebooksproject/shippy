@@ -115,17 +115,19 @@ already in hand and never stops a purchase.
 
 ## Label printers
 
-Printing is handled by the shared
-[`ibp-printing`](https://github.com/insidebooksproject/printing) library. On Windows a
-print queue is only used when **both** of these hold:
+Printing is handled by `ibp-printing`. A supported printer (the PM2411BT the
+shipping laptops use) is printed to directly over USB, with no print queue or
+naming rule, and is tried first. Any other printer is used through a print
+queue (Windows, or CUPS on Linux) only when **both** of these hold:
 
 1. The queue name ends in the printer's USB `VID:PID`, separated from the rest of
    the name by a space, tab, `_` or `-` — e.g. `DYMO LabelWriter 450 0922:0028`.
-   Only local print queues are considered (USB label printers are local; network
-   printer connections are skipped so a dead print server cannot stall printing).
+   On Windows only local print queues are considered (USB label printers are
+   local; network printer connections are skipped so a dead print server cannot
+   stall printing).
 2. A USB device with that `VID:PID` is currently plugged in.
 
-If several queues qualify, healthy, problem-free and default queues are tried
+If several printers qualify, healthy, problem-free and default queues are tried
 first; if one fails before the job is spooled, the next one is tried. After
 spooling, shippy follows the job for up to 30 seconds.
 
@@ -202,10 +204,10 @@ uvx --from git+https://github.com/insidebooksproject/shippy.git@deploy shippy di
 ```
 
 Run it **while the problem is happening** and send back the output together with
-the log files above. For every print queue it reports each detection check (name
-`VID:PID` suffix, USB device present and healthy, queue status) and whether the
-queue would be used, followed by the USB devices Windows sees and recent
-PrintService events.
+the log files above. It reports each direct USB printer and, for every print
+queue, each detection check (name `VID:PID` suffix, USB device present and
+healthy, queue status) and whether the queue would be used, followed by the USB
+devices the system sees and, on Windows, recent PrintService events.
 
 ## Development
 
