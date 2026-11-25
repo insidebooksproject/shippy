@@ -39,7 +39,12 @@ shippy needs a configuration file for the IBP server and the EasyPost API.
       both work. No IBP API key is needed; an old `apikey` line is ignored.
     - `easypost.apikey`: Your EasyPost API key.
     - `googlemaps.apikey`: Your Google Maps API key (address autocompletion
-      in `manual` mode).
+      in `manual` mode). The section is required in every mode.
+    - `[parcel]` (optional): the declared box in inches. `length`, `width`
+      and `height` (default 20 x 14 x 10) are the box used unless the
+      volunteer says the box is small; `small_length`, `small_width` and
+      `small_height` (default 12 x 12 x 12) are the small box, which must be
+      whole inches, exactly one cubic foot, with no side over 22.
 
     The return address and the recipient name for unit (bulk) shipments
     (`ATTN: MAILROOM STAFF`) are not set in `config.ini`: shippy reads them
@@ -96,8 +101,16 @@ Replace `<shipping_type>` with one of the following commands:
   request marked tossed. It doesn't ask about box size: every individual
   package is declared as the small box (12x12x12, one cubic foot), so pack
   individual requests in boxes no bigger than that.
-- `bulk`: For shipping bulk packages.
-- `manual`: For manually entering address details.
+- `bulk`: For shipping a box to a unit's mailroom. Pick the unit from the
+  server's list.
+- `manual`: For typing the address, with Google Maps autocompletion.
+
+In `bulk` and `manual`, packages of 4 pounds or more get one question
+(default No): is the box 1,728 cubic inches or less, each side rounded up to
+a whole inch, with no side over 22 inches? Yes declares the small box, so
+Ground Advantage can compete with Library Mail on actual weight. Below 4
+pounds Library Mail is always cheaper, so nothing is asked. Before buying, shippy
+shows the rates it compared and buys the cheapest USPS rate.
 
 Every recipient address is checked with EasyPost before buying, and a
 failed check never stops shipping. Only in `manual` mode, where the
