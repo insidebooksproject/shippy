@@ -48,23 +48,26 @@ shippy needs a configuration file for the IBP server and the EasyPost API.
 
 ## Running shippy
 
-`--config` is required for every shipping mode. You can run shippy straight
-from the git repository with `uvx`, without a local installation:
+`--config` is required for every shipping mode. The stations run the
+`deploy` branch straight from GitHub with `uvx` (see [Releasing](#releasing)):
 
 ```
-uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config path/to/your/config.ini <shipping_type>
+uvx --from git+https://github.com/insidebooksproject/shippy.git@deploy shippy --config path/to/your/config.ini <shipping_type>
 ```
 
 **Example:**
 
 ```
-uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config config.ini bulk
+uvx --from git+https://github.com/insidebooksproject/shippy.git@deploy shippy --config config.ini bulk
 ```
+
+The shipping laptops' desktop shortcuts run this with
+`--config C:\Users\insid\config.ini` and `bulk` or `individual`.
 
 To wrap the above in a powershell command, you can do the following:
 
 ```
-powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/insidebooksproject/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
+powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/insidebooksproject/shippy.git@deploy' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
 ```
 
 From a local checkout (see [Development](#development)), run `shippy` or
@@ -195,7 +198,7 @@ shippy diagnose-printer
 Or via `uvx`:
 
 ```
-uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy diagnose-printer
+uvx --from git+https://github.com/insidebooksproject/shippy.git@deploy shippy diagnose-printer
 ```
 
 Run it **while the problem is happening** and send back the output together with
@@ -234,3 +237,18 @@ shippy --preview --config config.ini manual
 **`--preview` still buys real postage.** It only skips the printer. For
 development, put an EasyPost **test** API key (from the EasyPost dashboard) in
 your config so no real postage is purchased.
+
+### Releasing
+
+`main` and `deploy` stay at the same tip. Merge feature branches straight
+into `main` (no pull requests), test, then release by fast-forwarding
+`deploy` to it:
+
+```
+git push origin main:deploy
+```
+
+The shipping laptops run `@deploy` with `uvx` at every launch, and the kiosk
+image installs shippy from `deploy` as a uv tool, so both pick up the release
+at the next launch. Never commit to `deploy` directly. To roll back, push
+the previous commit to `deploy` with `--force-with-lease`.
