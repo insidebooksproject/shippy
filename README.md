@@ -1,47 +1,24 @@
 # shippy
 
-`shippy` is a Python application designed to streamline the process of printing shipping labels for books destined for incarcerated individuals in Texas. It integrates with an internal server for address management and the EasyPost API for postage purchasing and label generation.
+`shippy` is the command-line app the Inside Books Project (IBP) shipping
+stations use to print shipping labels for books sent to people incarcerated in
+Texas. It gets recipient and return addresses from the IBP server, buys the
+cheapest USPS postage through the EasyPost API, and prints the label, with the
+IBP logo, on a USB label printer through the shared
+[`ibp-printing`](https://github.com/insidebooksproject/printing) library. A
+label that cannot reach any printer is saved to a print queue folder instead of
+being thrown away (see [When a label does not print](#when-a-label-does-not-print)).
 
-## Purpose
-
-The primary goal of this utility is to provide a robust system for the Inside Books Project (IBP) to generate and print accurate shipping labels. It automates the postage purchasing and label creation process, interacting with IBP's internal server to retrieve recipient addresses and using EasyPost for carrier services. The application supports various shipping workflows, including bulk, individual, and manual shipments.
+The stations use its `individual` and `bulk` modes; packages to a typed
+address go through [shippy-gui](https://github.com/insidebooksproject/shippy-gui).
 
 ## About Inside Books Project
 
 Inside Books Project is an Austin-based community service volunteer organization that sends free reading materials to people incarcerated in Texas, and also publishes resource guides and short-form instructional pamphlets. Inside Books is the only books-to-prisoners program in Texas, where more than 120,000 people are behind bars. Inside Books Project works to promote reading, literacy, and education among incarcerated individuals and to educate the general public on issues of incarceration.
 
-## Features
-
-- **Integration with IBP Server**: Fetches unit IDs, return addresses, and recipient addresses from an internal IBP server.
-- **EasyPost API Integration**: Utilizes the EasyPost API for purchasing postage and generating shipping labels.
-- **Multiple Shipping Modes**: Supports bulk, individual, and manual address input for shipping.
-- **Label Printing**: Generates and prints postage labels, with an option to include a custom logo.
-- **Error Handling**: Includes mechanisms to catch and display errors during the shipping process. A label that cannot reach any printer is saved to a print queue folder instead of being thrown away (see [When a label does not print](#when-a-label-does-not-print)).
-
-## Installation and Development
-
-To set up the `shippy` project for development, ensure you have [uv](https://github.com/astral-sh/uv) installed.
-
-1.  **Create and activate a virtual environment:**
-
-    ```
-    uv venv
-    source .venv/bin/activate
-    ```
-
-    On Windows, use `.venv\Scripts\activate`.
-
-2.  **Install dependencies:**
-
-    The project dependencies are defined in `pyproject.toml`. Sync them using `uv`:
-
-    ```
-    uv sync --all-extras
-    ```
-
 ## Configuration
 
-The application requires a configuration file for the internal IBP server and the EasyPost API.
+shippy needs a configuration file for the IBP server and the EasyPost API.
 
 1.  Create a `config.ini` file (see `sample.ini` for a full example).
 2.  Populate it with your API keys and the server URL:
@@ -69,17 +46,35 @@ The application requires a configuration file for the internal IBP server and th
     from the server's `/shipping-settings`, which volunteers can edit in the
     IBP web app.
 
-## Usage
+## Running shippy
 
-The `shippy` application is run from the command line. You must specify the path to your configuration file using the `--config` option.
-
-### Running from the Local Environment
-
-Once you've installed the dependencies in your virtual environment, you can run the tool using `shippy` or `python -m shippy`.
+`--config` is required for every shipping mode. You can run shippy straight
+from the git repository with `uvx`, without a local installation:
 
 ```
-shippy --config path/to/your/config.ini <shipping_type>
+uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config path/to/your/config.ini <shipping_type>
 ```
+
+**Example:**
+
+```
+uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config config.ini bulk
+```
+
+To wrap the above in a powershell command, you can do the following:
+
+```
+powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/insidebooksproject/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
+```
+
+From a local checkout (see [Development](#development)), run `shippy` or
+`python -m shippy` with the same arguments:
+
+```
+shippy --config config.ini individual
+```
+
+### Shipping modes
 
 Replace `<shipping_type>` with one of the following commands:
 
@@ -114,32 +109,6 @@ so the IBP server can match labels to requests: `ibp1:req:<request code>`
 e.g. `ibp1:unit:Texas:BETO`), or `ibp1:manual` (`manual`, an older server
 that sends no request code, or anything unexpected). It is built from data
 already in hand and never stops a purchase.
-
-**Example:**
-
-```
-shippy --config config.ini individual
-```
-
-### Running as a Tool with `uvx`
-
-You can also run the application directly from the git repository without a local installation using `uvx`. This is useful for running the tool in different environments.
-
-```
-uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config path/to/your/config.ini <shipping_type>
-```
-
-**Example:**
-
-```
-uvx --from git+https://github.com/insidebooksproject/shippy.git@main shippy --config config.ini bulk
-```
-
-To wrap the above in a powershell command, you can do the following:
-
-```
-powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/insidebooksproject/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
-```
 
 ## Label printers
 
@@ -201,19 +170,6 @@ prints `N label(s) waiting to print` when labels are queued or waiting at
 the printer. shippy doesn't ask about possible duplicates: shipping several
 boxes to one unit is normal, and an unused label is refunded automatically.
 
-### Development: `--preview`
-
-On Linux, every CUPS queue is usable. For development without printing a label,
-pass `--preview` to open each label in an image viewer instead:
-
-```
-shippy --preview --config config.ini manual
-```
-
-**`--preview` still buys real postage.** It only skips the printer. For
-development, put an EasyPost **test** API key (from the EasyPost dashboard) in
-your config so no real postage is purchased.
-
 ### Logs
 
 Every discovery pass and print attempt is logged verbosely to
@@ -247,3 +203,34 @@ the log files above. For every print queue it reports each detection check (name
 `VID:PID` suffix, USB device present and healthy, queue status) and whether the
 queue would be used, followed by the USB devices Windows sees and recent
 PrintService events.
+
+## Development
+
+Install [uv](https://github.com/astral-sh/uv), then in a clone of this repo:
+
+```
+uv venv
+source .venv/bin/activate
+uv sync
+```
+
+On Windows, use `.venv\Scripts\activate`. Run the tests, formatting, lint and
+type checks as CI does:
+
+```
+uv run pytest
+uv run black --check shippy
+uv run pylint shippy
+uv run mypy shippy
+```
+
+To try a change without printing, pass `--preview` to open each label in an
+image viewer instead:
+
+```
+shippy --preview --config config.ini manual
+```
+
+**`--preview` still buys real postage.** It only skips the printer. For
+development, put an EasyPost **test** API key (from the EasyPost dashboard) in
+your config so no real postage is purchased.
