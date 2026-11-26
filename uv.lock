@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 
 [[package]]
@@ -149,8 +149,8 @@ sdist = { url = "https://files.pythonhosted.org/packages/fe/26/bca4d737a9acea25e
 
 [[package]]
 name = "ibp-printing"
-version = "0.4.0"
-source = { git = "https://github.com/insidebooksproject/printing?tag=v0.4.0#842f82c410b90aeddd8d38be48d8999762618439" }
+version = "0.5.0"
+source = { git = "https://github.com/insidebooksproject/printing?tag=v0.5.0#26102e25360e329b3bdb030faa58d3b292a197aa" }
 dependencies = [
     { name = "pillow" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
@@ -582,7 +582,7 @@ dev = [
 requires-dist = [
     { name = "easypost", specifier = ">=10.1.0" },
     { name = "googlemaps", specifier = ">=4.10.0" },
-    { name = "ibp-printing", git = "https://github.com/insidebooksproject/printing?tag=v0.4.0" },
+    { name = "ibp-printing", git = "https://github.com/insidebooksproject/printing?tag=v0.5.0" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.51" },
     { name = "pydantic", specifier = ">=2.11.7" },
