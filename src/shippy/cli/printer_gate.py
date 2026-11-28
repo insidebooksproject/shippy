@@ -14,7 +14,8 @@ from typing import Callable
 import questionary
 from ibp_printing import discover, quiet
 from ibp_printing.log import get_logger
-from ibp_printing.printers import LabelRole
+
+from shippy.core.printers import shipping_printers
 
 logger = get_logger("shippy.printer_gate")
 
@@ -27,21 +28,15 @@ WAITING_STYLE = "bold fg:ansiblack bg:ansiyellow"
 def usable_printer_names() -> list[str]:
     """Names of the shipping-label printers that can be printed to right now.
 
-    Only printers for 4x6 postage count: a known package-label printer (an
-    SP310 or a DYMO LabelWriter 450, by ibp-printing's printer registry) is
-    left out, as it is when the label is printed (``label="shipping"``); a
-    queue for a printer ibp-printing doesn't know still counts.
+    Only printers for 4x6 postage count (``shipping_printers``): a known
+    package-label printer is left out, as it is when the label is printed.
 
     discover() only lists printers and devices; it never sends a job. A
     discovery failure counts as "no printer" so it can never block shipping
     for good (the volunteer can still continue anyway).
     """
     try:
-        return [
-            candidate.name
-            for candidate in discover().usable
-            if candidate.prints(LabelRole.SHIPPING)
-        ]
+        return [candidate.name for candidate in shipping_printers(discover().usable)]
     except Exception:  # pylint: disable=broad-exception-caught
         logger.exception("printer discovery failed while waiting for a printer")
         return []

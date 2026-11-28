@@ -37,6 +37,7 @@ from shippy.core.label_image import (
     load_logo,
 )
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
+from shippy.core.printers import SHIPPING_LABEL
 
 from . import console, printer_gate, rates
 
@@ -449,7 +450,7 @@ def print_label(shipment, image: Image.Image) -> PrintResult:
             job_name=f"Shipping Label {shipment.id}",
             track_timeout_s=PRINT_TRACK_TIMEOUT_S,
             # Never a package-label printer (SP310, DYMO): postage is 4x6.
-            label="shipping",
+            label=SHIPPING_LABEL,
         )
 
 
