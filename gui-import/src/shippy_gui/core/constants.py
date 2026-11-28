@@ -1,0 +1,125 @@
+"""Application-wide constants."""
+
+# ============================================================================
+# Printing Constants
+# ============================================================================
+
+# Page layout, scaling and platform details are owned by ibp-printing.
+
+# Spooler job name for quick prints (the tracking code is appended when known).
+PRINT_JOB_NAME = "Shipping Label"
+
+# How long a quick print follows the spooled job before reporting success.
+# Tracking only adds detail to the printer logs: the call returns as soon as the
+# job completes or leaves the queue, and an errored or timed-out job never
+# triggers a refund (the label may still print once the printer is fixed).
+# Kept above ibp-printing's 10 s error grace period so a stuck job is logged
+# as an error rather than a timeout.
+PRINT_TRACK_TIMEOUT_S = 15.0
+
+# How often the printer status line re-checks for a usable label printer while
+# none is found, so a printer that was just plugged in shows up quickly.
+PRINTER_POLL_MS = 2_000
+# How often it re-checks once a printer is found. On Windows each check briefly
+# opens the USB device to read its ID, so it is kept rare while a printer is
+# there (and could be printing for the label watcher).
+PRINTER_POLL_FOUND_MS = 10_000
+
+
+# ============================================================================
+# Label Constants
+# ============================================================================
+
+# Logo overlay position on shipping label (in pixels)
+# Positioned in the lower-right area of a standard 4x6 shipping label
+LOGO_PASTE_X = 450
+LOGO_PASTE_Y = 425
+
+
+# ============================================================================
+# UI Constants
+# ============================================================================
+
+# Status message colors (hex)
+STATUS_COLOR_INFO = "#0066CC"  # Blue
+STATUS_COLOR_SUCCESS = "#008800"  # Green
+STATUS_COLOR_WARNING = "#FF8800"  # Orange
+STATUS_COLOR_ERROR = "#CC0000"  # Red
+
+STATUS_COLORS = {
+    "info": STATUS_COLOR_INFO,
+    "success": STATUS_COLOR_SUCCESS,
+    "warning": STATUS_COLOR_WARNING,
+    "error": STATUS_COLOR_ERROR,
+}
+
+# Default font size
+DEFAULT_FONT_SIZE = 11
+FONT_SIZE_MIN = 8
+FONT_SIZE_MAX = 24
+
+# Logging defaults
+DEFAULT_LOG_FILENAME = "shippy.log"
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
+
+
+# ============================================================================
+# Shipping Constants
+# ============================================================================
+
+# Service Configuration
+SHIPMENT_COUNTRY = "US"
+SHIPMENT_CARRIER = "USPS"
+SHIPMENT_SERVICE = "USPS.LIBRARYMAIL"
+PARCEL_PREDEFINED_PACKAGE = "Parcel"
+
+# Each shipment's EasyPost ``reference`` says what the label was bought for, so
+# the IBP server can match labels to requests later. shippy-gui only ships to
+# typed addresses, so every label it buys is tagged as manual (shippy's CLI
+# also uses ``ibp1:req:<code>`` and ``ibp1:unit:<jurisdiction>:<name>``).
+SHIPMENT_REFERENCE = "ibp1:manual"
+
+# Default declared parcel dimensions in inches. USPS requires all three
+# dimensions for the "Parcel" container type. Library Mail is priced by
+# weight alone, so these just need to be large enough for any book package
+# while staying under the USPS nonstandard-size surcharge thresholds
+# (22 inches per side, 2 cubic feet).
+DEFAULT_PARCEL_LENGTH_IN = 20.0
+DEFAULT_PARCEL_WIDTH_IN = 14.0
+DEFAULT_PARCEL_HEIGHT_IN = 10.0
+
+# Ground Advantage is priced on actual weight only for boxes of at most one
+# cubic foot (1,728 cu in); bigger boxes, like the default above, pay
+# dimensional weight (L x W x H / 166), so Library Mail always wins for them.
+# USPS rounds each side UP to a whole inch before multiplying, and adds
+# surcharges for any side over SMALL_BOX_MAX_SIDE_IN. A box qualifies when,
+# with sides rounded up, L x W x H <= SMALL_BOX_MAX_CUBIC_IN and no side is
+# over SMALL_BOX_MAX_SIDE_IN. Any qualifying box is priced the same, so it is
+# declared as the 12 in cube below, and Ground Advantage is quoted fairly and
+# wins when it is cheaper.
+# Below SMALL_BOX_MIN_WEIGHT_LBS Library Mail is cheaper either way, so the
+# question is not asked.
+SMALL_BOX_MIN_WEIGHT_LBS = 4
+SMALL_BOX_MAX_CUBIC_IN = 1728
+SMALL_BOX_MAX_SIDE_IN = 22
+SMALL_BOX_LENGTH_IN = 12.0
+SMALL_BOX_WIDTH_IN = 12.0
+SMALL_BOX_HEIGHT_IN = 12.0
+
+# Weight limits for Library Mail (in pounds)
+WEIGHT_MIN_LBS = 1
+WEIGHT_MAX_LBS = 70
+DEFAULT_WEIGHT_LBS = 3
+
+# Ounces per pound for weight conversion
+OUNCES_PER_POUND = 16
+
+
+# How long to let an in-flight shipment finish when the window closes. A
+# shipment interrupted between buying postage and refunding it strands money,
+# so this is generous.
+SHIPMENT_SHUTDOWN_WAIT_MS = 30_000
+
+# Address lookups only cost a little latency, so they get far less grace.
+LOOKUP_SHUTDOWN_WAIT_MS = 3_000
