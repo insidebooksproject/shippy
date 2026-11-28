@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from ibp_printing.printers import LabelRole, parse_role
 
 from shippy.cli import app as cli
 from shippy.core import label_journal
@@ -120,3 +121,15 @@ def test_unreadable_journal_prints_nothing(printed):
     ):
         cli.report_pending_labels()
     assert not printed.call_args_list
+
+
+def test_postage_only_goes_to_shipping_label_printers(printed):
+    """A package-label printer (SP310, DYMO) is never picked for a 4x6 label."""
+    with mock.patch.object(cli, "print_to_first_available") as print_label:
+        result = cli.print_label(SHIPMENT, mock.Mock())
+
+    assert result is print_label.return_value
+    role = print_label.call_args.kwargs["label"]
+    # The pinned ibp-printing knows the role (an unknown one raises ValueError).
+    assert parse_role(role) is LabelRole.SHIPPING
+    assert printed.called  # the "Printing postage ... done!" progress line

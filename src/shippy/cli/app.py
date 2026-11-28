@@ -448,6 +448,8 @@ def print_label(shipment, image: Image.Image) -> PrintResult:
             image,
             job_name=f"Shipping Label {shipment.id}",
             track_timeout_s=PRINT_TRACK_TIMEOUT_S,
+            # Never a package-label printer (SP310, DYMO): postage is 4x6.
+            label="shipping",
         )
 
 
