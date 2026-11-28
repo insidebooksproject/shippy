@@ -635,8 +635,12 @@ def ship(args: argparse.Namespace) -> None:
     )
 
     try:
-        with console.task_message("Verifying return address"):
-            easypost_client.address.verify(from_addr.id)
+        fetch_until_ok(
+            "Verifying return address",
+            lambda: easypost_client.address.verify(from_addr.id),
+            what="the return address",
+            not_retried=(easypost.errors.InvalidRequestError,),
+        )
     except easypost.errors.InvalidRequestError:
         questionary.print(
             "  Failed to verify return address, consider double-checking before shipping.",
@@ -658,19 +662,27 @@ def ship(args: argparse.Namespace) -> None:
         report_pending_labels()
 
 
-def fetch_until_ok(message: str, fetch: typing.Callable[[], T], *, what: str) -> T:
+def fetch_until_ok(
+    message: str,
+    fetch: typing.Callable[[], T],
+    *,
+    what: str,
+    not_retried: tuple[type[Exception], ...] = (),
+) -> T:
     """Run a startup step that needs the IBP server or EasyPost until it works.
 
     Nothing can be shipped without it, so a failure doesn't end shippy: as
     with the printer gate, the volunteer fixes the connection (or gets a
     coordinator, when the request was turned down) and presses Enter to try
     again, or Ctrl+C to quit. ``what`` names the data for the message, e.g.
-    "the return address".
+    "the return address". Errors in ``not_retried`` are raised to the caller.
     """
     while True:
         try:
             with console.task_message(message):
                 return fetch()
+        except not_retried:
+            raise
         except (*SERVER_ERRORS, easypost.errors.EasyPostError) as exc:
             logger.error("%s failed", message, exc_info=exc)
             questionary.print(

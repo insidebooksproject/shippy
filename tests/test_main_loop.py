@@ -154,6 +154,8 @@ class MainLoopTests(MainLoopCase):
         self.assertEqual(self.client.address.verify.call_count, 3)
         self.assertEqual(self.client.shipment.buy.call_count, 2)
         self.assertNotIn("Failed to verify address", self.printed_text())
+        # The return address's failed check only warns; it isn't retried.
+        self.assertIn("Failed to verify return address", self.printed_text())
 
 
 class ApiErrorTests(MainLoopCase):
@@ -288,6 +290,21 @@ class ApiErrorTests(MainLoopCase):
             self.printed_text(),
         )
         self.input.assert_called_once()
+
+    def test_return_address_verify_timeout_waits_for_enter(self):
+        self.client.address.verify.side_effect = [
+            easypost.errors.TimeoutError("Request timed out."),
+            mock.DEFAULT,
+            mock.DEFAULT,
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn("Can't reach EasyPost.", self.printed_text())
+        self.input.assert_called_once()
+        # The failed check, its retry, then each of the two unit addresses.
+        self.assertEqual(self.client.address.verify.call_count, 4)
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
 
     def test_ctrl_c_at_return_address_retry_quits(self):
         self.server.return_address.side_effect = ServerError(404, "Not Found")
