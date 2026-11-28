@@ -5,18 +5,12 @@ from unittest.mock import patch
 
 import easypost
 
-from shippy.gui.core.constants import (
-    PARCEL_PREDEFINED_PACKAGE,
-    SMALL_BOX_HEIGHT_IN,
-    SMALL_BOX_LENGTH_IN,
-    SMALL_BOX_WIDTH_IN,
-)
+from shippy.gui.core.constants import PARCEL_PREDEFINED_PACKAGE
 from shippy.gui.core.models import ParcelConfig
 from shippy.gui.core.services import (
     PurchaseError,
     ShipmentService,
     purchase_may_have_completed,
-    small_box_problem,
 )
 
 errors = easypost.errors
@@ -161,36 +155,20 @@ class PurchaseMayHaveCompletedTests(unittest.TestCase):
                 self.assertIs(purchase_may_have_completed(error), expected)
 
 
-class SmallBoxProblemTests(unittest.TestCase):
-    """The declared small box must avoid dimensional weight and long-side fees."""
+class ConfiguredSmallBoxTests(unittest.TestCase):
+    """The small box comes from [parcel], checked when the config is read."""
 
-    def test_configured_small_box_is_valid(self):
-        self.assertEqual(
-            small_box_problem(
-                SMALL_BOX_LENGTH_IN, SMALL_BOX_WIDTH_IN, SMALL_BOX_HEIGHT_IN
-            ),
-            "",
-        )
-
-    def test_sides_are_rounded_up_before_the_volume(self):
-        # 15.5 x 11 x 10 = 1,705 as measured, but USPS counts 16 x 11 x 10.
-        self.assertIn("1,760 cu in", small_box_problem(15.5, 11, 10))
-
-    def test_long_side_is_rejected_even_under_one_cubic_foot(self):
-        self.assertIn("over 22 in", small_box_problem(24, 9, 8))
-
-    def test_one_cubic_foot_exactly_is_allowed(self):
-        self.assertEqual(small_box_problem(18, 12, 8), "")
-
-    @patch("shippy.gui.core.services.SMALL_BOX_LENGTH_IN", 24.0)
     @patch("shippy.gui.core.services.easypost.EasyPostClient")
-    def test_invalid_small_box_buys_nothing(self, client_class):
-        service = ShipmentService("ep_test", ParcelConfig())
+    def test_configured_small_box_is_declared(self, client_class):
+        parcel_config = ParcelConfig(small_length=18, small_width=12, small_height=8)
+        service = ShipmentService("ep_test", parcel_config)
 
-        with self.assertRaises(ValueError):
-            service.buy_shipment("from_id", "to_id", 96.0, small_box=True)
+        service.buy_shipment("from_id", "to_id", 96.0, small_box=True)
 
-        client_class.return_value.shipment.buy.assert_not_called()
+        kwargs = client_class.return_value.parcel.create.call_args.kwargs
+        self.assertEqual(
+            (kwargs["length"], kwargs["width"], kwargs["height"]), (18.0, 12.0, 8.0)
+        )
 
 
 if __name__ == "__main__":

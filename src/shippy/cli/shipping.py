@@ -62,10 +62,6 @@ def unit_reference(jurisdiction: Any, name: Any) -> str:
     return f"ibp1:unit:{jurisdiction}:{name}"[:MAX_REFERENCE_LENGTH]
 
 
-# Below this weight Library Mail is always cheaper than Ground Advantage, so
-# the box size can't change the rate and volunteers aren't asked about it.
-BOX_QUESTION_MIN_LB = 4
-
 # Services shown side by side before buying (EasyPost service names).
 COMPARED_SERVICES = ("LibraryMail", "GroundAdvantage")
 

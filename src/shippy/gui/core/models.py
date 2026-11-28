@@ -1,13 +1,11 @@
 """Pydantic models for configuration checking."""
 
 from typing import Any, Optional
-from pydantic import AnyHttpUrl, BaseModel, field_validator
+from pydantic import BaseModel, field_validator
 
+from shippy.core import models as core_models
 from shippy.gui.core.constants import (
     DEFAULT_FONT_SIZE,
-    DEFAULT_PARCEL_HEIGHT_IN,
-    DEFAULT_PARCEL_LENGTH_IN,
-    DEFAULT_PARCEL_WIDTH_IN,
     DEFAULT_WEIGHT_LBS,
     FONT_SIZE_MIN,
     FONT_SIZE_MAX,
@@ -103,36 +101,13 @@ class AutocompletePrediction(BaseModel):
     types: list[str] = []
 
 
-class ParcelConfig(BaseModel):
-    """Model for declared parcel dimensions in inches."""
-
-    length: float = DEFAULT_PARCEL_LENGTH_IN
-    width: float = DEFAULT_PARCEL_WIDTH_IN
-    height: float = DEFAULT_PARCEL_HEIGHT_IN
-
-    @field_validator("length", "width", "height")
-    @classmethod
-    def validate_positive(cls, v: float) -> float:
-        """Ensure parcel dimensions are positive."""
-        if v <= 0:
-            raise ValueError("Parcel dimensions must be positive")
-        return v
+# The [parcel] and [ibp] sections are read exactly as the shippy CLI reads them.
+ParcelConfig = core_models.ParcelConfig
+IbpConfig = core_models.IbpConfig
 
 
-class IbpConfig(BaseModel):
-    """Model for IBP API configuration.
-
-    The return address on every label comes from this server.
-    """
-
-    url: AnyHttpUrl
-    apikey: Optional[str] = None
-
-
-class EasypostConfig(BaseModel):
-    """Model for Easypost configuration."""
-
-    apikey: str
+class EasypostConfig(core_models.EasypostConfig):
+    """Model for Easypost configuration (the key may not be blank)."""
 
     @field_validator("apikey")
     @classmethod
@@ -143,10 +118,8 @@ class EasypostConfig(BaseModel):
         return v
 
 
-class GoogleMapsConfig(BaseModel):
-    """Model for Google Maps configuration."""
-
-    apikey: str
+class GoogleMapsConfig(core_models.GoogleMapsConfig):
+    """Model for Google Maps configuration (the key may not be blank)."""
 
     @field_validator("apikey")
     @classmethod
@@ -157,14 +130,12 @@ class GoogleMapsConfig(BaseModel):
         return v
 
 
-class Config(BaseModel):
-    """Model for application configuration."""
+class Config(core_models.Config):
+    """Model for application configuration: the CLI's plus ``[ui]``."""
 
     ui: Optional[UiConfig] = None
     easypost: EasypostConfig
     googlemaps: GoogleMapsConfig
-    ibp: IbpConfig
-    parcel: ParcelConfig = ParcelConfig()
 
     def get_font_size(self) -> int:
         """Get font size with default fallback."""

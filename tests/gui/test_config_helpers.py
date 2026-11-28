@@ -9,11 +9,6 @@ from unittest.mock import patch
 from pydantic import ValidationError
 
 from shippy.gui.core.config import initialize_config_file, resolve_log_path
-from shippy.gui.core.constants import (
-    DEFAULT_PARCEL_HEIGHT_IN,
-    DEFAULT_PARCEL_LENGTH_IN,
-    DEFAULT_PARCEL_WIDTH_IN,
-)
 from shippy.gui.core.models import Config
 
 BASE_CONFIG_DICT = {
@@ -58,9 +53,8 @@ class ParcelConfigTests(unittest.TestCase):
     def test_parcel_defaults_apply_when_section_missing(self):
         config = Config.model_validate(BASE_CONFIG_DICT)
 
-        self.assertEqual(config.parcel.length, DEFAULT_PARCEL_LENGTH_IN)
-        self.assertEqual(config.parcel.width, DEFAULT_PARCEL_WIDTH_IN)
-        self.assertEqual(config.parcel.height, DEFAULT_PARCEL_HEIGHT_IN)
+        self.assertEqual(config.parcel.dimensions(False), (20.0, 14.0, 10.0))
+        self.assertEqual(config.parcel.dimensions(True), (12.0, 12.0, 12.0))
 
     def test_parcel_section_parses_ini_string_values(self):
         config = Config.model_validate(
@@ -77,6 +71,20 @@ class ParcelConfigTests(unittest.TestCase):
     def test_parcel_dimensions_must_be_positive(self):
         with self.assertRaises(ValidationError):
             Config.model_validate({**BASE_CONFIG_DICT, "parcel": {"length": "0"}})
+
+    def test_blank_api_keys_are_refused(self):
+        for section in ("easypost", "googlemaps"):
+            with self.subTest(section=section):
+                with self.assertRaises(ValidationError):
+                    Config.model_validate(
+                        {**BASE_CONFIG_DICT, section: {"apikey": "  "}}
+                    )
+
+    def test_ui_section_is_optional(self):
+        config = Config.model_validate(BASE_CONFIG_DICT)
+
+        self.assertIsNone(config.ui)
+        self.assertEqual(config.get_font_size(), 11)
 
 
 if __name__ == "__main__":

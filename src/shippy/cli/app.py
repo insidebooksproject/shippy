@@ -29,8 +29,8 @@ from PIL import Image
 
 from . import console, labels, printer_gate, shipping
 from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
+from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
 from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
-from .models import Config
 from .server import Server, ServerError, to_easypost_address
 
 # How long to follow a spooled label job before giving up on knowing its outcome.
@@ -133,7 +133,7 @@ def generate_addresses_bulk(config: Config):
         if weight is None:
             continue
 
-        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        small_box = console.query_small_box(weight, SMALL_BOX_MIN_WEIGHT_LB)
         if small_box is None:
             continue
 
@@ -320,7 +320,7 @@ def generate_addresses_manual(config: Config):
         if weight is None:
             continue
 
-        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        small_box = console.query_small_box(weight, SMALL_BOX_MIN_WEIGHT_LB)
         if small_box is None:
             continue
 

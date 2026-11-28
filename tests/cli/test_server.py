@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 import requests
 
-from shippy.cli.models import IbpConfig
+from shippy.core.models import IbpConfig
 from shippy.cli.server import Server, ServerError, to_easypost_address
 
 from .conftest import (

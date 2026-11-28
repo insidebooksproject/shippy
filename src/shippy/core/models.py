@@ -1,24 +1,37 @@
-"""Pydantic models for configuration checking."""
+"""Pydantic models for the config.ini sections both apps read.
+
+shippy-gui's config adds a ``[ui]`` section and refuses blank API keys (see
+``shippy.gui.core.models``); otherwise both apps read the same sections the
+same way.
+"""
 
 import math
+from typing import Optional
 
-from pydantic import BaseModel, HttpUrl, PositiveFloat, model_validator
+from pydantic import AnyHttpUrl, BaseModel, PositiveFloat, model_validator
 
 # USPS prices Ground Advantage by dimensional weight above one cubic foot.
-CUBIC_FOOT_IN3 = 1728.0
+CUBIC_FOOT_IN3 = 1728
 # Above this length per side USPS adds Ground Advantage surcharges.
-MAX_SIDE_IN = 22.0
+MAX_SIDE_IN = 22
+
+# Below this weight (pounds) Library Mail is always cheaper than Ground
+# Advantage, so the box size can't change the rate and volunteers aren't asked
+# about it.
+SMALL_BOX_MIN_WEIGHT_LB = 4
 
 
 class IbpConfig(BaseModel):
     """Model for IBP configuration.
 
-    The new IBP FastAPI backend does not use API keys, so only the base URL
-    is needed. The return address and unit recipient name come from the
+    The IBP FastAPI backend does not use API keys, so only the base URL is
+    needed; ``apikey`` (which shippy-gui's Settings still shows) is read but
+    never sent. The return address and unit recipient name come from the
     server's ``/shipping-settings`` endpoint, not from this config.
     """
 
-    url: HttpUrl
+    url: AnyHttpUrl
+    apikey: Optional[str] = None
 
 
 class EasypostConfig(BaseModel):

@@ -1,5 +1,7 @@
 """Application-wide constants."""
 
+from shippy.core.models import CUBIC_FOOT_IN3, MAX_SIDE_IN, SMALL_BOX_MIN_WEIGHT_LB
+
 # ============================================================================
 # Printing Constants
 # ============================================================================
@@ -70,32 +72,21 @@ PARCEL_PREDEFINED_PACKAGE = "Parcel"
 # also uses ``ibp1:req:<code>`` and ``ibp1:unit:<jurisdiction>:<name>``).
 SHIPMENT_REFERENCE = "ibp1:manual"
 
-# Default declared parcel dimensions in inches. USPS requires all three
-# dimensions for the "Parcel" container type. Library Mail is priced by
-# weight alone, so these just need to be large enough for any book package
-# while staying under the USPS nonstandard-size surcharge thresholds
-# (22 inches per side, 2 cubic feet).
-DEFAULT_PARCEL_LENGTH_IN = 20.0
-DEFAULT_PARCEL_WIDTH_IN = 14.0
-DEFAULT_PARCEL_HEIGHT_IN = 10.0
-
+# The declared parcel (the [parcel] section, shippy.core.models.ParcelConfig):
 # Ground Advantage is priced on actual weight only for boxes of at most one
-# cubic foot (1,728 cu in); bigger boxes, like the default above, pay
+# cubic foot (1,728 cu in); bigger boxes, like the default 20 x 14 x 10, pay
 # dimensional weight (L x W x H / 166), so Library Mail always wins for them.
 # USPS rounds each side UP to a whole inch before multiplying, and adds
 # surcharges for any side over SMALL_BOX_MAX_SIDE_IN. A box qualifies when,
 # with sides rounded up, L x W x H <= SMALL_BOX_MAX_CUBIC_IN and no side is
 # over SMALL_BOX_MAX_SIDE_IN. Any qualifying box is priced the same, so it is
-# declared as the 12 in cube below, and Ground Advantage is quoted fairly and
-# wins when it is cheaper.
+# declared as the configured small box (a 12 in cube by default), and Ground
+# Advantage is quoted fairly and wins when it is cheaper.
 # Below SMALL_BOX_MIN_WEIGHT_LBS Library Mail is cheaper either way, so the
 # question is not asked.
-SMALL_BOX_MIN_WEIGHT_LBS = 4
-SMALL_BOX_MAX_CUBIC_IN = 1728
-SMALL_BOX_MAX_SIDE_IN = 22
-SMALL_BOX_LENGTH_IN = 12.0
-SMALL_BOX_WIDTH_IN = 12.0
-SMALL_BOX_HEIGHT_IN = 12.0
+SMALL_BOX_MIN_WEIGHT_LBS = SMALL_BOX_MIN_WEIGHT_LB
+SMALL_BOX_MAX_CUBIC_IN = CUBIC_FOOT_IN3
+SMALL_BOX_MAX_SIDE_IN = MAX_SIDE_IN
 
 # Weight limits for Library Mail (in pounds)
 WEIGHT_MIN_LBS = 1

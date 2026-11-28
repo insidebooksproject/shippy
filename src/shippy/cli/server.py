@@ -13,7 +13,7 @@ from urllib.parse import quote, urljoin
 
 import requests
 
-from .models import IbpConfig
+from shippy.core.models import IbpConfig
 
 JURISDICTIONS = {
     "TEX": "Texas",

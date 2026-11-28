@@ -9,7 +9,7 @@ import easypost  # type: ignore
 import pytest
 
 from shippy.cli import app as cli
-from shippy.cli.models import Config
+from shippy.core.models import Config
 
 from .conftest import BASE_URL, SHIPPING_SETTINGS, UNIT, request_address
 
