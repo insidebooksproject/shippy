@@ -30,7 +30,12 @@ from PIL import Image
 from shippy.core import label_journal, postage, purchase
 from shippy.core.ibp_server import Server, ServerError, to_easypost_address
 from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
-from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
+from shippy.core.label_image import (
+    add_logo,
+    build_tempfile,
+    grab_png_from_url,
+    load_logo,
+)
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
 
 from . import console, printer_gate, rates

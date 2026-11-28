@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from shippy.core.misc import LOGO_POSITION, add_logo, build_tempfile, load_logo
+from shippy.core.label_image import LOGO_POSITION, add_logo, build_tempfile, load_logo
 
 
 class BuildTempfileTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class BuildTempfileTests(unittest.TestCase):
     def test_creation_failure_surfaces_the_real_error(self):
         """Cleanup must not mask why the tempfile could not be created."""
         with patch(
-            "shippy.core.misc.tempfile.NamedTemporaryFile",
+            "shippy.core.label_image.tempfile.NamedTemporaryFile",
             side_effect=PermissionError("no write access to temp dir"),
         ):
             with self.assertRaises(PermissionError):

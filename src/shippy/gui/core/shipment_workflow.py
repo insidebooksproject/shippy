@@ -16,7 +16,7 @@ from shippy.core.log import GUI_APP
 from shippy.gui.core.constants import (
     PRINT_JOB_NAME,
 )
-from shippy.core.misc import add_logo, grab_png_from_url
+from shippy.core.label_image import add_logo, grab_png_from_url
 from shippy.core.postage import OUNCES_PER_POUND
 from shippy.core.purchase import (
     CHECK_PRINTER_ADVICE,
