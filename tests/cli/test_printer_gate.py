@@ -1,8 +1,11 @@
 """Tests for the wait-for-a-label-printer gate."""
 
 import unittest
+from unittest import mock
 
+from ibp_printing import Discovery, PrinterCandidate, PrintQueue, UsbDevice
 from ibp_printing import log as log_module
+from ibp_printing.printers import LABELWRITER_450_TURBO, PM2411BT, SP310
 
 from shippy.cli import printer_gate
 
@@ -116,6 +119,49 @@ class UsablePrinterNamesTests(unittest.TestCase):
                 self.assertEqual(printer_gate.usable_printer_names(), [])
         finally:
             printer_gate.discover = original
+
+
+def plugged_in(name: str, vid_pid: str) -> PrinterCandidate:
+    """A usable print queue whose USB device is plugged in."""
+    device = UsbDevice(
+        device_id=f"USB\\VID_{vid_pid[:4]}&PID_{vid_pid[5:]}\\1", vid_pid=vid_pid
+    )
+    return PrinterCandidate(PrintQueue(name=name), vid_pid, (device,))
+
+
+class ShippingPrintersOnlyTests(unittest.TestCase):
+    """Only printers for 4x6 postage let a purchase go ahead."""
+
+    def names_with(self, *candidates):
+        """usable_printer_names() with these printers plugged in."""
+        found = Discovery(candidates=list(candidates))
+        with mock.patch.object(printer_gate, "discover", return_value=found):
+            return printer_gate.usable_printer_names()
+
+    def test_package_label_printers_alone_count_as_no_printer(self):
+        names = self.names_with(
+            plugged_in("SP310 Package", SP310.vid_pid),
+            plugged_in("DYMO LabelWriter", LABELWRITER_450_TURBO.vid_pid),
+        )
+        self.assertEqual(names, [])
+
+    def test_shipping_and_unknown_printers_count(self):
+        names = self.names_with(
+            plugged_in("SP310 Package", SP310.vid_pid),
+            plugged_in("BOB", PM2411BT.vid_pid),
+            plugged_in("Label printer 1234:5678", "1234:5678"),
+        )
+        self.assertEqual(sorted(names), ["BOB", "Label printer 1234:5678"])
+
+    def test_only_a_package_printer_shows_the_no_printer_prompt(self):
+        say = FakeConsole()
+        found = Discovery(candidates=[plugged_in("SP310 Package", SP310.vid_pid)])
+        with mock.patch.object(printer_gate, "discover", return_value=found):
+            ready = printer_gate.wait_for_printer(
+                wait_for_continue=lambda _t: True, say=say
+            )
+        self.assertFalse(ready)
+        self.assertIn("  NO LABEL PRINTER FOUND  ", say.lines)
 
 
 if __name__ == "__main__":
