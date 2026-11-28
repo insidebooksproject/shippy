@@ -165,11 +165,15 @@ postage was bought. Try this package again." If the purchase itself failed
 without a clear answer from EasyPost (a timeout, a lost connection, a server
 error), the charge may have gone through, so it says "The purchase may not
 have completed. Try this package again; an unused label is refunded
-automatically." shippy doesn't check for or refund such a label itself.
+automatically." shippy doesn't check for or refund such a label itself. If
+EasyPost refuses the payment, it says "The EasyPost account can't pay for
+postage right now. Tell a coordinator; no postage was bought."
 
-If the return address (or, for bulk, the units list) can't be fetched at
-startup, shippy says it can't reach the IBP server or EasyPost and waits:
-press Enter to try again, or Ctrl+C to quit (exit status 130). Any other
+If the return address (or, for bulk, the units list) can't be fetched or
+checked at startup, shippy waits: press Enter to try again, or Ctrl+C to
+quit (exit status 130). It says it can't reach the IBP server or EasyPost,
+or, when one of them turned the request down (e.g. EasyPost rejected the
+return address), gives the reason and asks for a coordinator. Any other
 error it didn't expect is logged, and shippy says "shippy hit a problem it
 didn't expect. The details are in <log folder>. Press Enter to close." before
 exiting with status 1.
