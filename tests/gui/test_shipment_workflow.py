@@ -10,12 +10,12 @@ import ibp_printing
 from ibp_printing.labels import set_journal_path
 from PIL import Image
 
-from journal_fakes import install_fake_journal
+from .journal_fakes import install_fake_journal
 
-from shippy_gui.core import label_journal
-from shippy_gui.core.models import RecipientAddress, ReturnAddressConfig
-from shippy_gui.core.services import PurchaseError
-from shippy_gui.core.shipment_workflow import (
+from shippy.gui.core import label_journal
+from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
+from shippy.gui.core.services import PurchaseError
+from shippy.gui.core.shipment_workflow import (
     CHECK_PRINTER_ADVICE,
     LABEL_NOT_PREPARED_MESSAGE,
     NOT_BOUGHT_MESSAGE,
@@ -49,7 +49,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
             zipcode="77340",
         )
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_returns_ready_result(self, mock_grab_png):
         from_addr = Mock(id="from_123")
         to_addr = Mock(id="to_123")
@@ -86,7 +86,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         shipment.selected_rate = bought
         return shipment
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_passes_small_box_and_summarizes_rates(self, mock_grab_png):
         library = Mock(service="LibraryMail", rate="9.12", carrier="USPS")
         ground = Mock(service="GroundAdvantage", rate="8.40", carrier="USPS")
@@ -113,7 +113,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(warnings, [])
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_defaults_to_large_box(self, mock_grab_png):
         self.service.create_address.side_effect = [Mock(id="f"), Mock(id="t")]
         self.service.buy_shipment.return_value = self._bought([], None)
@@ -131,7 +131,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
             "f", "t", 128, small_box=False
         )
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_warns_when_library_mail_missing(self, mock_grab_png):
         ground = Mock(service="GroundAdvantage", rate="8.40", carrier="USPS")
         self.service.create_address.side_effect = [Mock(id="f"), Mock(id="t")]
@@ -153,16 +153,16 @@ class ShipmentWorkflowTests(unittest.TestCase):
         self.assertIn("no Library Mail rate was quoted", warnings[0])
 
     @patch(
-        "shippy_gui.core.shipment_workflow.summarize_rates",
+        "shippy.gui.core.shipment_workflow.summarize_rates",
         side_effect=RuntimeError("bad rate data"),
     )
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_rate_summary_failure_never_refunds(self, mock_grab_png, _summarize):
         self.service.create_address.side_effect = [Mock(id="f"), Mock(id="t")]
         self.service.buy_shipment.return_value = self._bought([], None)
         mock_grab_png.return_value = Image.new("RGB", (10, 10), "white")
 
-        with self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR"):
+        with self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"):
             result = self.workflow.prepare_label(
                 ShipmentWorkflowInput(
                     from_address=self.from_address,
@@ -175,7 +175,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         self.assertIsNone(result.rate_summary)
         self.service.refund_shipment.assert_not_called()
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_records_purchase_in_journal(self, mock_grab_png):
         shipment = Mock(id="shp_123")
         shipment.tracking_code = "TRACK123"
@@ -209,7 +209,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         )
         self.assertIsNotNone(result.label_record)
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_emits_warnings_for_verify_failures(self, mock_grab_png):
         from_addr = Mock(id="from_123")
         to_addr = Mock(id="to_123")
@@ -224,7 +224,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         warnings = []
         # Match the production error type contract closely enough for the warning branch.
         with patch(
-            "shippy_gui.core.shipment_workflow.easypost.errors.InvalidRequestError",
+            "shippy.gui.core.shipment_workflow.easypost.errors.InvalidRequestError",
             Exception,
         ):
             result = self.workflow.prepare_label(
@@ -251,13 +251,13 @@ class ShipmentWorkflowTests(unittest.TestCase):
                 self.service.reset_mock()
                 with (
                     patch(
-                        "shippy_gui.core.shipment_workflow.print_image",
+                        "shippy.gui.core.shipment_workflow.print_image",
                         side_effect=error,
                     ),
                     patch(
-                        "shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry"
+                        "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry"
                     ) as mock_save,
-                    self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR"),
+                    self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"),
                 ):
                     result = self.workflow.print_prepared_label(
                         self._prepared(), "Printer Name"
@@ -309,7 +309,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
 
         with (
             patch(
-                "shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry",
+                "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry",
                 side_effect=save_into_temp,
             ) as mock_save,
             self.assertLogs("ibp_printing", "ERROR"),
@@ -353,7 +353,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         saved = Path("/tmp/to-print/TRACK123.png")
 
         with patch(
-            "shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry",
+            "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry",
             return_value=saved,
         ) as mock_save:
             result = self.workflow.print_prepared_label(prepared_result, "")
@@ -375,11 +375,11 @@ class ShipmentWorkflowTests(unittest.TestCase):
 
         with (
             patch(
-                "shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry",
+                "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry",
                 side_effect=OSError("disk full"),
             ),
             self.assertLogs("ibp_printing", "ERROR"),
-            self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR"),
+            self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"),
         ):
             result = self.workflow.print_prepared_label(prepared_result, "Printer Name")
 
@@ -398,7 +398,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         shipment.postage_label.label_url = "https://example.com/label.png"
         self.service.create_address.side_effect = [Mock(id="f"), Mock(id="t")]
         self.service.buy_shipment.return_value = shipment
-        with self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR"):
+        with self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"):
             return self.workflow.prepare_label(
                 ShipmentWorkflowInput(
                     from_address=self.from_address,
@@ -408,7 +408,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
                 )
             )
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_refunds_when_label_download_fails(self, mock_grab_png):
         mock_grab_png.side_effect = ConnectionError("download failed")
 
@@ -425,7 +425,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         self.assertEqual(len(self.journal.purchases), 1)
         self.assertEqual(self.journal.statuses(), ["refunded"])
 
-    @patch("shippy_gui.core.shipment_workflow.grab_png_from_url")
+    @patch("shippy.gui.core.shipment_workflow.grab_png_from_url")
     def test_prepare_label_refunds_when_logo_cannot_be_applied(self, mock_grab_png):
         mock_grab_png.return_value = Image.new("RGB", (10, 10), "white")
         logo = self.enterContext(tempfile.NamedTemporaryFile(suffix=".jpg"))
@@ -440,7 +440,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
 
     def _prepare_failing(self):
         """Prepare a label whose creation fails; return the result and log."""
-        with self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR") as logs:
+        with self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR") as logs:
             result = self.workflow.prepare_label(
                 ShipmentWorkflowInput(
                     from_address=self.from_address,
@@ -527,7 +527,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         )
 
         with patch(
-            "shippy_gui.core.shipment_workflow.print_image", return_value=print_result
+            "shippy.gui.core.shipment_workflow.print_image", return_value=print_result
         ):
             result = self.workflow.print_prepared_label(
                 prepared_result, "Alpha 20d1:7008"
@@ -556,7 +556,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
                     "Alpha", "Shipping Label", outcome=outcome
                 )
                 with patch(
-                    "shippy_gui.core.shipment_workflow.print_image",
+                    "shippy.gui.core.shipment_workflow.print_image",
                     return_value=print_result,
                 ):
                     result = self.workflow.print_prepared_label(
@@ -588,7 +588,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         )
 
         with patch(
-            "shippy_gui.core.shipment_workflow.print_image", return_value=print_result
+            "shippy.gui.core.shipment_workflow.print_image", return_value=print_result
         ):
             result = self.workflow.print_prepared_label(prepared_result, "Alpha")
 
@@ -601,7 +601,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         shipment = Mock(id="shp_123")
         self.service.refund_shipment.side_effect = RuntimeError("refund failed")
 
-        with self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR"):
+        with self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"):
             result = self.workflow.refund_after_failure(shipment, "Printing error")
 
         self.assertEqual(result.status, ShipmentWorkflowStatus.ERROR)

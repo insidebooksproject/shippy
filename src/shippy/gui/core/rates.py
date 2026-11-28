@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from shippy_gui.core.constants import SHIPMENT_CARRIER
+from shippy.gui.core.constants import SHIPMENT_CARRIER
 
 LIBRARY_MAIL = "LibraryMail"
 GROUND_ADVANTAGE = "GroundAdvantage"

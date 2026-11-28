@@ -7,10 +7,10 @@ from unittest.mock import ANY, Mock, patch
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
-from journal_fakes import install_fake_journal, make_record
+from .journal_fakes import install_fake_journal, make_record
 
-from shippy_gui.core.constants import STATUS_COLORS
-from shippy_gui.core.models import (
+from shippy.gui.core.constants import STATUS_COLORS
+from shippy.gui.core.models import (
     Config,
     EasypostConfig,
     GoogleMapsConfig,
@@ -18,21 +18,21 @@ from shippy_gui.core.models import (
     RecipientAddress,
     IbpConfig,
 )
-from shippy_gui.core.shipment_workflow import (
+from shippy.gui.core.shipment_workflow import (
     ShipmentWorkflowResult,
     ShipmentWorkflowStatus,
 )
-from shippy_gui.core.label_journal import LabelIdentity
-from shippy_gui.core.rates import RateSummary
-from shippy_gui.printing.printer_manager import DialogPrintStatus
-from shippy_gui.shipping_coordinators import (
+from shippy.gui.core.label_journal import LabelIdentity
+from shippy.gui.core.rates import RateSummary
+from shippy.gui.printing.printer_manager import DialogPrintStatus
+from shippy.gui.shipping_coordinators import (
     AddressLookupCoordinator,
     ShipmentFlowCoordinator,
     ShippingStatusPresenter,
 )
-from shippy_gui.widgets.address_form import AddressForm
-from shippy_gui.widgets.printer_gate import PrinterGateResult
-from shippy_gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.printer_gate import PrinterGateResult
+from shippy.gui.widgets.shipment_controls import ShipmentControls
 
 
 class FakeSignal:
@@ -94,7 +94,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertEqual(label.text(), "Done")
         self.assertIn("font-weight: bold", label.styleSheet())
 
-    @patch("shippy_gui.shipping_coordinators.QTimer.singleShot")
+    @patch("shippy.gui.shipping_coordinators.QTimer.singleShot")
     def test_address_lookup_merges_fields_and_reports_success(self, mock_single_shot):
         parent = QWidget()
         search_input = QLineEdit()
@@ -129,7 +129,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertEqual(search_input.text(), "")
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_shipment_flow_starts_worker_and_handles_success(
@@ -246,7 +246,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         return coordinator, created_workers[0], status_label
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_small_box_answer_reaches_worker_and_rates_shown(self, _modifiers):
@@ -268,7 +268,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertIn(STATUS_COLORS["success"], status_label.styleSheet())
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_missing_library_mail_shows_warning_status(self, _modifiers):
@@ -283,9 +283,9 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertIn("no Library Mail rate was quoted", status_label.text())
         self.assertIn(STATUS_COLORS["warning"], status_label.styleSheet())
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox.warning")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox.warning")
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_shipment_flow_warns_when_spooled_label_may_not_have_printed(
@@ -334,9 +334,9 @@ class ShippingCoordinatorTests(unittest.TestCase):
         mock_warning.assert_called_once()
         self.assertIn("It may NOT have printed", mock_warning.call_args.args[2])
 
-    @patch("shippy_gui.shipping_coordinators.show_label_queued")
+    @patch("shippy.gui.shipping_coordinators.show_label_queued")
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_shipment_flow_clears_form_and_warns_when_label_saved(
@@ -443,10 +443,10 @@ class ShippingCoordinatorTests(unittest.TestCase):
         return coordinator, workers, status_label, shipment_controls, done
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
-    @patch("shippy_gui.shipping_coordinators.QMessageBox")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox")
     def test_same_recipient_again_creates_label_without_asking(
         self, mock_box, _mock_modifiers
     ):
@@ -465,7 +465,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         controls.set_enabled.assert_called_once_with(False)
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_refreshes_when_done(self, _mock_modifiers):
@@ -495,7 +495,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment.tracking_code = "TRACK123"
         return coordinator, status_label, shipment
 
-    @patch("shippy_gui.shipping_coordinators.print_image_with_dialog")
+    @patch("shippy.gui.shipping_coordinators.print_image_with_dialog")
     def test_dialog_cancel_refunds(self, mock_print_dialog):
         mock_print_dialog.return_value = DialogPrintStatus.CANCELED
         shipment_service = Mock()
@@ -507,8 +507,8 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertEqual(status_label.text(), "Print canceled. Refunded.")
         self.assertEqual(self.journal.status_updates, [("TRACK123", "refunded", None)])
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox")
-    @patch("shippy_gui.shipping_coordinators.print_image_with_dialog")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox")
+    @patch("shippy.gui.shipping_coordinators.print_image_with_dialog")
     def test_dialog_cancel_refund_failure_is_left_to_the_refund_job(
         self, mock_print_dialog, mock_box
     ):
@@ -517,7 +517,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_service.refund_shipment.side_effect = RuntimeError("HTTP 503")
         coordinator, status_label, shipment = self._dialog_coordinator(shipment_service)
 
-        with self.assertLogs("shippy_gui.shipping_coordinators", "ERROR"):
+        with self.assertLogs("shippy.gui.shipping_coordinators", "ERROR"):
             coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
 
         self.assertEqual(
@@ -527,9 +527,9 @@ class ShippingCoordinatorTests(unittest.TestCase):
         mock_box.critical.assert_not_called()
         self.assertEqual(self.journal.status_updates, [])
 
-    @patch("shippy_gui.shipping_coordinators.show_label_queued")
-    @patch("shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry")
-    @patch("shippy_gui.shipping_coordinators.print_image_with_dialog")
+    @patch("shippy.gui.shipping_coordinators.show_label_queued")
+    @patch("shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry")
+    @patch("shippy.gui.shipping_coordinators.print_image_with_dialog")
     def test_dialog_not_sent_saves_label_without_refund(
         self, mock_print_dialog, mock_save, mock_show_queued
     ):
@@ -562,12 +562,12 @@ class ShippingCoordinatorTests(unittest.TestCase):
             self.journal.status_updates, [("TRACK123", "queued", str(saved))]
         )
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox")
     @patch(
-        "shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry",
+        "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry",
         side_effect=OSError("disk full"),
     )
-    @patch("shippy_gui.shipping_coordinators.print_image_with_dialog")
+    @patch("shippy.gui.shipping_coordinators.print_image_with_dialog")
     def test_dialog_not_sent_refunds_when_save_fails(
         self, mock_print_dialog, _mock_save, mock_box
     ):
@@ -577,16 +577,16 @@ class ShippingCoordinatorTests(unittest.TestCase):
             shipment_service
         )
 
-        with self.assertLogs("shippy_gui.core.shipment_workflow", "ERROR"):
+        with self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"):
             coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
 
         shipment_service.refund_shipment.assert_called_once_with("shp_123")
         mock_box.critical.assert_called_once()
         self.assertIn("being refunded", mock_box.critical.call_args.args[2])
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox")
-    @patch("shippy_gui.core.shipment_workflow.ibp_printing.save_for_retry")
-    @patch("shippy_gui.shipping_coordinators.print_image_with_dialog")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox")
+    @patch("shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry")
+    @patch("shippy.gui.shipping_coordinators.print_image_with_dialog")
     def test_dialog_failure_after_start_warns_without_refund(
         self, mock_print_dialog, mock_save, mock_box
     ):
@@ -609,7 +609,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertIn("TRACK123", status_label.text())
         self.assertEqual(self.journal.statuses(), ["check_printer"])
 
-    @patch("shippy_gui.shipping_coordinators.print_image_with_dialog")
+    @patch("shippy.gui.shipping_coordinators.print_image_with_dialog")
     def test_dialog_printed_marks_label_printed(self, mock_print_dialog):
         mock_print_dialog.return_value = DialogPrintStatus.PRINTED
         coordinator, _status_label, shipment = self._dialog_coordinator(Mock())
@@ -663,7 +663,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         coordinator, _workers, status_label, _controls, _done = self._flow_coordinator()
         form = AddressForm()
         with patch(
-            "shippy_gui.widgets.shipment_controls.get_available_printers",
+            "shippy.gui.widgets.shipment_controls.get_available_printers",
             return_value=[],
         ):
             controls = ShipmentControls(default_weight=8)
@@ -680,7 +680,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertFalse(controls.small_box)
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_printer_gate_cancel_clears_box_answer(self, _mock_modifiers):
@@ -693,9 +693,9 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertEqual(workers, [])
         controls.clear_small_box.assert_called_once_with()
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox.critical")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox.critical")
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_shipment_error_clears_box_answer(self, _mock_modifiers, _critical):
@@ -707,7 +707,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         controls.clear_small_box.assert_called_once_with()
 
     @patch(
-        "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+        "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
         return_value=Qt.KeyboardModifier.NoModifier,
     )
     def test_create_label_drops_stale_rate_summary(self, _mock_modifiers):
@@ -719,7 +719,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
 
         self.assertEqual(status_label.text(), "Label printed")
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox.warning")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox.warning")
     def test_check_printer_warning_keeps_rates_visible(self, _warning):
         coordinator, _workers, status_label, _controls, _done = self._flow_coordinator()
         coordinator.worker = Mock(rate_summary=self._RATES)
@@ -730,7 +730,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         self.assertEqual(status_label.text(), f"Check the printer\n{self._RATES.text}")
         self.assertIn(STATUS_COLORS["warning"], status_label.styleSheet())
 
-    @patch("shippy_gui.shipping_coordinators.show_label_queued")
+    @patch("shippy.gui.shipping_coordinators.show_label_queued")
     def test_queued_label_keeps_rates_visible(self, _show_queued):
         coordinator, _workers, status_label, _controls, _done = self._flow_coordinator()
         coordinator.worker = Mock(rate_summary=self._RATES)
@@ -759,7 +759,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         controls.clear_small_box.assert_called_once_with()
         self.assertEqual(status_label.text(), "Please enter ZIP code")
 
-    @patch("shippy_gui.shipping_coordinators.QMessageBox.critical")
+    @patch("shippy.gui.shipping_coordinators.QMessageBox.critical")
     def test_missing_services_clears_box_answer(self, mock_critical):
         coordinator, workers, _label, controls, _done = self._flow_coordinator()
         coordinator._get_shipment_service = (
@@ -780,7 +780,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         status_label = QLabel()
         presenter = ShippingStatusPresenter(status_label)
         with patch(
-            "shippy_gui.widgets.shipment_controls.get_available_printers",
+            "shippy.gui.widgets.shipment_controls.get_available_printers",
             return_value=[],
         ):
             controls = ShipmentControls(default_weight=8)
@@ -832,7 +832,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         status_label = QLabel()
         presenter = ShippingStatusPresenter(status_label)
         with patch(
-            "shippy_gui.widgets.shipment_controls.get_available_printers",
+            "shippy.gui.widgets.shipment_controls.get_available_printers",
             return_value=[],
         ):
             controls = ShipmentControls(default_weight=8)

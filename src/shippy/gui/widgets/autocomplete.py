@@ -7,8 +7,8 @@ import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-err
 from PySide6.QtCore import QStringListModel, Qt, QThread, QTimer, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QCompleter, QLineEdit  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
-from shippy_gui.core.constants import LOOKUP_SHUTDOWN_WAIT_MS
-from shippy_gui.core.models import AutocompletePrediction
+from shippy.gui.core.constants import LOOKUP_SHUTDOWN_WAIT_MS
+from shippy.gui.core.models import AutocompletePrediction
 
 logger = logging.getLogger(__name__)
 

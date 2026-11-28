@@ -4,7 +4,7 @@ import unittest
 
 from ibp_printing import log as log_module
 
-from shippy import printer_gate
+from shippy.cli import printer_gate
 
 
 class FakeConsole:

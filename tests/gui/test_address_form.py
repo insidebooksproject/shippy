@@ -4,7 +4,7 @@ import unittest
 
 from PySide6.QtWidgets import QApplication
 
-from shippy_gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.address_form import AddressForm
 
 
 class AddressReplacedSignalTests(unittest.TestCase):

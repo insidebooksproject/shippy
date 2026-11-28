@@ -2,7 +2,7 @@
 
 Tests must never touch the real journal on the developer's machine, so test
 cases that run the shipment flow install this fake in place of the
-``ibp_printing`` module as seen by ``shippy_gui.core.label_journal``.
+``ibp_printing`` module as seen by ``shippy.gui.core.label_journal``.
 """
 
 from dataclasses import dataclass
@@ -70,7 +70,7 @@ class FakeJournal:
 def install_fake_journal(test_case) -> FakeJournal:
     """Swap the journal for a fake for the rest of ``test_case``."""
     fake = FakeJournal()
-    patcher = patch("shippy_gui.core.label_journal.ibp_printing", fake)
+    patcher = patch("shippy.gui.core.label_journal.ibp_printing", fake)
     patcher.start()
     test_case.addCleanup(patcher.stop)
     return fake

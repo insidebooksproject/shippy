@@ -6,28 +6,28 @@ from unittest.mock import Mock, patch
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
-from journal_fakes import install_fake_journal
-from test_shipping_coordinators import FakeWorker
+from .journal_fakes import install_fake_journal
+from .test_shipping_coordinators import FakeWorker
 
-from shippy_gui.core.models import (
+from shippy.gui.core.models import (
     Config,
     EasypostConfig,
     GoogleMapsConfig,
     RecipientAddress,
     IbpConfig,
 )
-from shippy_gui.printing.models import PrinterInfo
-from shippy_gui.shipping_coordinators import (
+from shippy.gui.printing.models import PrinterInfo
+from shippy.gui.shipping_coordinators import (
     ShipmentFlowCoordinator,
     ShippingStatusPresenter,
 )
-from shippy_gui.widgets.address_form import AddressForm
-from shippy_gui.widgets.printer_gate import (
+from shippy.gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.printer_gate import (
     NoPrinterDialog,
     PrinterGateResult,
     wait_for_printer,
 )
-from shippy_gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.widgets.shipment_controls import ShipmentControls
 
 
 class NoPrinterDialogTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class NoPrinterDialogTests(unittest.TestCase):
     def test_returns_at_once_when_a_printer_is_ready(self):
         controls = ShipmentControls(discover=lambda: [PrinterInfo("Alpha 20d1:7008")])
 
-        with patch("shippy_gui.widgets.printer_gate.NoPrinterDialog") as dialog:
+        with patch("shippy.gui.widgets.printer_gate.NoPrinterDialog") as dialog:
             self.assertIs(
                 wait_for_printer(None, controls), PrinterGateResult.PRINTER_FOUND
             )
@@ -78,7 +78,7 @@ class NoPrinterDialogTests(unittest.TestCase):
         self.assertFalse(dialog.continue_button.isDefault())
 
     def test_choices_are_logged(self):
-        logger_name = "shippy_gui.widgets.printer_gate"
+        logger_name = "shippy.gui.widgets.printer_gate"
         for button, expected in (
             ("continue_button", "continued without a printer"),
             ("cancel_button", "cancelled: no printer"),
@@ -107,7 +107,7 @@ class NoPrinterDialogTests(unittest.TestCase):
 
 
 @patch(
-    "shippy_gui.shipping_coordinators.QApplication.keyboardModifiers",
+    "shippy.gui.shipping_coordinators.QApplication.keyboardModifiers",
     return_value=Qt.KeyboardModifier.NoModifier,
 )
 class ShipmentFlowPrinterGateTests(unittest.TestCase):
@@ -174,7 +174,7 @@ class ShipmentFlowPrinterGateTests(unittest.TestCase):
     def test_continue_anyway_buys_without_a_printer(self, _modifiers):
         coordinator = self._coordinator(PrinterGateResult.CONTINUE_ANYWAY)
 
-        with self.assertLogs("shippy_gui.shipping_coordinators", "WARNING"):
+        with self.assertLogs("shippy.gui.shipping_coordinators", "WARNING"):
             coordinator.create_label()
 
         self.assertEqual(len(self.workers), 1)

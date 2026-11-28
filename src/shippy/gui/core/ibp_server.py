@@ -11,7 +11,7 @@ from urllib.parse import urljoin
 import requests
 from pydantic import ValidationError
 
-from shippy_gui.core.models import ReturnAddressConfig
+from shippy.gui.core.models import ReturnAddressConfig
 
 SHIPPING_SETTINGS_PATH = "shipping-settings"
 TIMEOUT_SECONDS = 15.0

@@ -22,9 +22,9 @@ from ibp_printing import (
 from PIL import Image
 from PySide6.QtCore import QRectF  # pylint: disable=no-name-in-module
 
-from shippy_gui.core.constants import PRINT_TRACK_TIMEOUT_S
-from shippy_gui.printing import printer_manager
-from shippy_gui.printing.models import PrinterTransport
+from shippy.gui.core.constants import PRINT_TRACK_TIMEOUT_S
+from shippy.gui.printing import printer_manager
+from shippy.gui.printing.models import PrinterTransport
 
 
 def _usb_candidate(name: str, vid_pid: str, **queue_kwargs) -> PrinterCandidate:
@@ -110,7 +110,7 @@ class PrinterManagerTests(unittest.TestCase):
 
         self.backend.discover = broken_discover  # type: ignore[method-assign]
 
-        with self.assertLogs("shippy_gui.printing.printer_manager", "ERROR"):
+        with self.assertLogs("shippy.gui.printing.printer_manager", "ERROR"):
             self.assertEqual(printer_manager.get_available_printers(), [])
 
     def test_get_default_printer_delegates_to_backend(self):
@@ -133,7 +133,7 @@ class PrinterManagerTests(unittest.TestCase):
 
         with (
             self.assertLogs("ibp_printing", "ERROR"),
-            self.assertLogs("shippy_gui.printing.printer_manager", "WARNING"),
+            self.assertLogs("shippy.gui.printing.printer_manager", "WARNING"),
         ):
             result = printer_manager.print_image(Image.new("RGB", (4, 6)), "Alpha")
 
@@ -182,28 +182,28 @@ class DialogPrintTests(unittest.TestCase):
 
     def test_begin_failure_is_not_sent(self):
         painter = self._painter(begin=False)
-        with self.assertLogs("shippy_gui.printing.printer_manager", "WARNING"):
+        with self.assertLogs("shippy.gui.printing.printer_manager", "WARNING"):
             status = self._run(painter)
         self.assertEqual(status, printer_manager.DialogPrintStatus.NOT_SENT)
         painter.drawImage.assert_not_called()
 
     def test_failure_before_begin_is_not_sent(self):
         painter = self._painter()
-        with self.assertLogs("shippy_gui.printing.printer_manager", "ERROR"):
+        with self.assertLogs("shippy.gui.printing.printer_manager", "ERROR"):
             status = self._run(painter, image_qt_error=ValueError("bad image"))
         self.assertEqual(status, printer_manager.DialogPrintStatus.NOT_SENT)
         painter.begin.assert_not_called()
 
     def test_failure_after_begin_is_uncertain(self):
         painter = self._painter(draw_error=RuntimeError("draw failed"))
-        with self.assertLogs("shippy_gui.printing.printer_manager", "ERROR"):
+        with self.assertLogs("shippy.gui.printing.printer_manager", "ERROR"):
             status = self._run(painter)
         self.assertEqual(status, printer_manager.DialogPrintStatus.UNCERTAIN)
         painter.end.assert_called_once_with()
 
     def test_end_failure_is_uncertain(self):
         painter = self._painter(end=False)
-        with self.assertLogs("shippy_gui.printing.printer_manager", "WARNING"):
+        with self.assertLogs("shippy.gui.printing.printer_manager", "WARNING"):
             status = self._run(painter)
         self.assertEqual(status, printer_manager.DialogPrintStatus.UNCERTAIN)
 

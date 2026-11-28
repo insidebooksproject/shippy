@@ -8,8 +8,8 @@ from urllib.parse import quote
 import easypost  # type: ignore
 import pytest
 
-from shippy import cli
-from shippy.models import Config
+from shippy.cli import app as cli
+from shippy.cli.models import Config
 
 from .conftest import BASE_URL, SHIPPING_SETTINGS, UNIT, request_address
 
@@ -40,7 +40,7 @@ def fixture_config():
 @pytest.fixture(name="printed")
 def fixture_printed():
     """Capture questionary.print output from the CLI module."""
-    with mock.patch("shippy.cli.questionary.print") as printer:
+    with mock.patch("shippy.cli.app.questionary.print") as printer:
         yield printer
 
 
@@ -52,10 +52,12 @@ def printed_text(printer) -> str:
 def run_individual(config, request_ids, weights=(3,), confirm=False):
     """Drive the individual generator with scripted prompts; return one item."""
     with (
-        mock.patch("shippy.cli.console.query_request_id", side_effect=request_ids),
-        mock.patch("shippy.cli.console.query_weight", side_effect=list(weights)),
-        mock.patch("shippy.cli.console.query_small_box") as box_question,
-        mock.patch("shippy.cli.console.confirm_tossed", return_value=confirm) as ask,
+        mock.patch("shippy.cli.app.console.query_request_id", side_effect=request_ids),
+        mock.patch("shippy.cli.app.console.query_weight", side_effect=list(weights)),
+        mock.patch("shippy.cli.app.console.query_small_box") as box_question,
+        mock.patch(
+            "shippy.cli.app.console.confirm_tossed", return_value=confirm
+        ) as ask,
     ):
         item = next(cli.generate_addresses_individual(config))
     box_question.assert_not_called()
@@ -164,7 +166,7 @@ def test_current_inmate_never_warns_about_unit(printed):
 def test_not_listed_inmate_is_not_shipped(printed, action):
     """TDCJ no longer lists the inmate: nothing is asked or bought."""
     address = request_address(inmate_status="not_listed", action=action)
-    with mock.patch("shippy.cli.console.confirm_tossed") as ask:
+    with mock.patch("shippy.cli.app.console.confirm_tossed") as ask:
         assert cli.check_request_address(address, now=NOW) is False
     ask.assert_not_called()
     text = printed_text(printed)
@@ -226,10 +228,10 @@ def test_bulk_uses_server_recipient_name(http, config, printed):
 
     with (
         mock.patch(
-            "shippy.cli.console.query_unit", side_effect=["HUGHES (FEDERAL)"]
+            "shippy.cli.app.console.query_unit", side_effect=["HUGHES (FEDERAL)"]
         ) as query_unit,
-        mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
-        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+        mock.patch("shippy.cli.app.console.query_weight", side_effect=[20]),
+        mock.patch("shippy.cli.app.console.query_small_box", return_value=False),
     ):
         to_addr, weight, _, _ = next(cli.generate_addresses_bulk(config))
 
@@ -247,9 +249,9 @@ def test_bulk_unit_not_found_skips(http, config, printed):
     http.add("units/Texas/Hughes", UNIT)
 
     with (
-        mock.patch("shippy.cli.console.query_unit", side_effect=["GONE", "HUGHES"]),
-        mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
-        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+        mock.patch("shippy.cli.app.console.query_unit", side_effect=["GONE", "HUGHES"]),
+        mock.patch("shippy.cli.app.console.query_weight", side_effect=[20]),
+        mock.patch("shippy.cli.app.console.query_small_box", return_value=False),
     ):
         to_addr, _, _, _ = next(cli.generate_addresses_bulk(config))
 
@@ -291,10 +293,10 @@ def test_bulk_tags_shipment_with_unit_name_unchanged(http, config):
 
     with (
         mock.patch(
-            "shippy.cli.console.query_unit", side_effect=["COYOTE'S BEND ST. JAIL"]
+            "shippy.cli.app.console.query_unit", side_effect=["COYOTE'S BEND ST. JAIL"]
         ),
-        mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
-        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+        mock.patch("shippy.cli.app.console.query_weight", side_effect=[20]),
+        mock.patch("shippy.cli.app.console.query_small_box", return_value=False),
     ):
         _, _, _, reference = next(cli.generate_addresses_bulk(config))
 
@@ -305,10 +307,10 @@ def test_manual_tags_shipment_manual(config):
     """A typed address is tagged as manual."""
     typed = dict(EXPECTED_INMATE_ADDRESS, name="Pat Example")
     with (
-        mock.patch("shippy.cli.googlemaps.Client"),
-        mock.patch("shippy.cli.console.query_address", return_value=typed),
-        mock.patch("shippy.cli.console.query_weight", return_value=2),
-        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+        mock.patch("shippy.cli.app.googlemaps.Client"),
+        mock.patch("shippy.cli.app.console.query_address", return_value=typed),
+        mock.patch("shippy.cli.app.console.query_weight", return_value=2),
+        mock.patch("shippy.cli.app.console.query_small_box", return_value=False),
     ):
         to_addr, _, _, reference = next(cli.generate_addresses_manual(config))
 
@@ -328,12 +330,12 @@ def test_main_return_address_from_shipping_settings(http, tmp_path, printed):
     argv = ["shippy", "--config", str(config_path), "manual"]
     with (
         mock.patch.object(sys, "argv", argv),
-        mock.patch("shippy.cli.easypost.EasyPostClient") as client,
-        mock.patch("shippy.cli.shipping.build_address") as build_address,
-        mock.patch("shippy.cli.generate_addresses_manual", return_value=iter([])),
-        mock.patch("shippy.cli.load_logo"),
+        mock.patch("shippy.cli.app.easypost.EasyPostClient") as client,
+        mock.patch("shippy.cli.app.shipping.build_address") as build_address,
+        mock.patch("shippy.cli.app.generate_addresses_manual", return_value=iter([])),
+        mock.patch("shippy.cli.app.load_logo"),
         # Real discovery would depend on this machine's printers.
-        mock.patch("shippy.cli.printer_gate.wait_for_printer"),
+        mock.patch("shippy.cli.app.printer_gate.wait_for_printer"),
     ):
         cli.main()
 
@@ -354,11 +356,12 @@ def test_main_quit_at_printer_prompt_exits_130(tmp_path):
     argv = ["shippy", "--config", str(config_path), "bulk"]
     with (
         mock.patch.object(sys, "argv", argv),
-        mock.patch("shippy.cli.easypost.EasyPostClient"),
-        mock.patch("shippy.cli.load_logo"),
-        mock.patch("shippy.cli.configure_logging"),
+        mock.patch("shippy.cli.app.easypost.EasyPostClient"),
+        mock.patch("shippy.cli.app.load_logo"),
+        mock.patch("shippy.cli.app.configure_logging"),
         mock.patch(
-            "shippy.cli.printer_gate.wait_for_printer", side_effect=KeyboardInterrupt
+            "shippy.cli.app.printer_gate.wait_for_printer",
+            side_effect=KeyboardInterrupt,
         ),
         pytest.raises(SystemExit) as excinfo,
     ):

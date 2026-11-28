@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from shippy import shipping
+from shippy.cli import shipping
 
 
 def test_request_reference_uses_server_code():

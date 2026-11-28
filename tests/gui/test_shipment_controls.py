@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from PySide6.QtWidgets import QApplication
 
-from shippy_gui.printing.models import PrinterInfo, PrinterTransport
-from shippy_gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.printing.models import PrinterInfo, PrinterTransport
+from shippy.gui.widgets.shipment_controls import ShipmentControls
 
 
 class ShipmentControlsTests(unittest.TestCase):
@@ -17,7 +17,7 @@ class ShipmentControlsTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    @patch("shippy_gui.widgets.shipment_controls.get_available_printers")
+    @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_refresh_preserves_current_selection_when_still_available(
         self, mock_get_available_printers
     ):
@@ -44,7 +44,7 @@ class ShipmentControlsTests(unittest.TestCase):
 
         self.assertEqual(controls.printer_name, "Alpha 20d1:7008")
 
-    @patch("shippy_gui.widgets.shipment_controls.get_available_printers")
+    @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_refresh_falls_back_to_default_then_first_available(
         self, mock_get_available_printers
     ):
@@ -64,7 +64,7 @@ class ShipmentControlsTests(unittest.TestCase):
         controls.refresh_printers()
         self.assertEqual(controls.printer_name, "Gamma 7777:3333")
 
-    @patch("shippy_gui.widgets.shipment_controls.get_available_printers")
+    @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_refresh_shows_no_printers_but_keeps_create_enabled_when_empty(
         self, mock_get_available_printers
     ):
@@ -84,7 +84,7 @@ class ShipmentControlsTests(unittest.TestCase):
             controls.printer_status_label.text(), ShipmentControls.NO_PRINTER_TEXT
         )
 
-    @patch("shippy_gui.widgets.shipment_controls.get_available_printers")
+    @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_set_enabled_true_keeps_printer_combo_disabled_when_no_printers(
         self, mock_get_available_printers
     ):
@@ -99,7 +99,7 @@ class ShipmentControlsTests(unittest.TestCase):
         self.assertFalse(controls.printer_combo.isEnabled())
         self.assertTrue(controls.refresh_button.isEnabled())
 
-    @patch("shippy_gui.widgets.shipment_controls.get_available_printers")
+    @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_tooltips_explain_refresh_and_filtering(self, mock_get_available_printers):
         mock_get_available_printers.return_value = [PrinterInfo("Alpha 20d1:7008")]
 
@@ -184,7 +184,7 @@ class PrinterPollingTests(unittest.TestCase):
         discover.calls = 0
         controls = ShipmentControls(discover=discover)
 
-        with self.assertLogs("shippy_gui.widgets.shipment_controls", "ERROR"):
+        with self.assertLogs("shippy.gui.widgets.shipment_controls", "ERROR"):
             controls.poll_printers()
             self._wait_for_poll(controls)
 
@@ -222,7 +222,7 @@ class PrinterPollingTests(unittest.TestCase):
 
     def test_printer_found_and_lost_are_logged(self):
         scans = [[], [PrinterInfo("Alpha 20d1:7008")], []]
-        logger_name = "shippy_gui.widgets.shipment_controls"
+        logger_name = "shippy.gui.widgets.shipment_controls"
         with self.assertLogs(logger_name, "INFO") as logs:
             controls = ShipmentControls(discover=lambda: scans.pop(0))
             controls.poll_printers()
@@ -242,7 +242,7 @@ class PrinterPollingTests(unittest.TestCase):
     def test_unchanged_poll_logs_nothing(self):
         printers = [PrinterInfo("Alpha 20d1:7008")]
         controls = ShipmentControls(discover=lambda: list(printers))
-        with self.assertNoLogs("shippy_gui.widgets.shipment_controls", "INFO"):
+        with self.assertNoLogs("shippy.gui.widgets.shipment_controls", "INFO"):
             controls.poll_printers()
             self._wait_for_poll(controls)
 
@@ -265,7 +265,7 @@ class PrinterPollingTests(unittest.TestCase):
 
 
 @patch(
-    "shippy_gui.widgets.shipment_controls.get_available_printers",
+    "shippy.gui.widgets.shipment_controls.get_available_printers",
     return_value=[PrinterInfo("Alpha 20d1:7008")],
 )
 class SmallBoxQuestionTests(unittest.TestCase):

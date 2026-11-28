@@ -10,8 +10,8 @@ from unittest import mock
 import easypost  # type: ignore
 import requests
 
-from shippy import cli, console
-from shippy.server import ServerError
+from shippy.cli import app as cli, console
+from shippy.cli.server import ServerError
 
 BASE_CONFIG = """\
 [ibp]

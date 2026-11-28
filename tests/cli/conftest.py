@@ -96,7 +96,7 @@ class FakeHttp:
 def fixture_http() -> typing.Iterator[FakeHttp]:
     """Patch shippy's HTTP GETs with a FakeHttp router."""
     fake = FakeHttp()
-    with mock.patch("shippy.server.requests.get", side_effect=fake.get):
+    with mock.patch("shippy.cli.server.requests.get", side_effect=fake.get):
         yield fake
 
 

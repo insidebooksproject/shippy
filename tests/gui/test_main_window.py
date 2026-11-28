@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from PySide6.QtWidgets import QApplication
 
-from shippy_gui.main_window import MainWindow
+from shippy.gui.main_window import MainWindow
 
 
 class MainWindowTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class MainWindowTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    @patch("shippy_gui.main_window.SettingsDialog")
+    @patch("shippy.gui.main_window.SettingsDialog")
     @patch.object(MainWindow, "_apply_font_from_config")
     @patch.object(MainWindow, "_init_ui", lambda self: None)
     def test_open_settings_reloads_shipping_tab_on_success(
@@ -35,7 +35,7 @@ class MainWindowTests(unittest.TestCase):
         window.shipping_tab.reload_config.assert_called_once_with()
         mock_apply_font.assert_called_once_with()
 
-    @patch("shippy_gui.main_window.SettingsDialog")
+    @patch("shippy.gui.main_window.SettingsDialog")
     @patch.object(MainWindow, "_apply_font_from_config")
     @patch.object(MainWindow, "_init_ui", lambda self: None)
     def test_open_settings_does_not_reload_when_dialog_is_cancelled(
@@ -55,7 +55,7 @@ class MainWindowTests(unittest.TestCase):
         window.shipping_tab.reload_config.assert_not_called()
         mock_apply_font.assert_not_called()
 
-    @patch("shippy_gui.main_window.QMessageBox.warning")
+    @patch("shippy.gui.main_window.QMessageBox.warning")
     @patch.object(MainWindow, "_init_ui", lambda self: None)
     def test_close_is_refused_while_a_shipment_runs(self, mock_warning):
         window = MainWindow(config_path="config.ini")
@@ -75,7 +75,7 @@ class MainWindowTests(unittest.TestCase):
         window.shipping_tab = Mock()
         window.shipping_tab.shipment_in_progress.return_value = False
 
-        with patch("shippy_gui.main_window.QMainWindow.closeEvent") as base_close:
+        with patch("shippy.gui.main_window.QMainWindow.closeEvent") as base_close:
             window.closeEvent(Mock())
 
         window.shipping_tab.wait_for_background_work.assert_called_once()

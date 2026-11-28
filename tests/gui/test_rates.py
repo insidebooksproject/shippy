@@ -3,7 +3,7 @@
 import unittest
 from types import SimpleNamespace
 
-from shippy_gui.core.rates import summarize_rates
+from shippy.gui.core.rates import summarize_rates
 
 
 def rate(service, price, carrier="USPS"):

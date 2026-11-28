@@ -5,14 +5,14 @@ from typing import Optional
 
 from PySide6.QtCore import QThread, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
-from shippy_gui.core.ibp_server import (
+from shippy.gui.core.ibp_server import (
     IbpServerError,
     IbpServerUnreachable,
     fetch_return_address,
 )
-from shippy_gui.core.models import RecipientAddress
-from shippy_gui.core.services import ShipmentService
-from shippy_gui.core.shipment_workflow import (
+from shippy.gui.core.models import RecipientAddress
+from shippy.gui.core.services import ShipmentService
+from shippy.gui.core.shipment_workflow import (
     CHECK_PRINTER_ADVICE,
     PURCHASE_UNCERTAIN_MESSAGE,
     ShipmentWorkflowInput,

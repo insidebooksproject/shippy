@@ -8,8 +8,8 @@ from typing import Optional
 
 from pydantic import ValidationError
 
-from shippy_gui.core.constants import DEFAULT_FONT_SIZE, DEFAULT_LOG_FILENAME
-from shippy_gui.core.models import Config
+from shippy.gui.core.constants import DEFAULT_FONT_SIZE, DEFAULT_LOG_FILENAME
+from shippy.gui.core.models import Config
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ def load_packaged_example_config() -> str:
     """Load the packaged config.example.ini contents."""
     try:
         with (
-            resources.files("shippy_gui")
+            resources.files("shippy.gui")
             .joinpath("config.example.ini")
             .open("r", encoding="utf-8") as handle
         ):

@@ -6,8 +6,8 @@ from typing import Optional, TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from shippy_gui.core.config import load_config, resolve_config_paths
-from shippy_gui.core.models import Config
+from shippy.gui.core.config import load_config, resolve_config_paths
+from shippy.gui.core.models import Config
 
 logger = logging.getLogger(__name__)
 

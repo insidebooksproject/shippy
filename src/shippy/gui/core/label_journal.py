@@ -16,7 +16,7 @@ from typing import Any, Optional
 
 import ibp_printing
 
-from shippy_gui.core.models import AddressBase
+from shippy.gui.core.models import AddressBase
 
 logger = logging.getLogger(__name__)
 

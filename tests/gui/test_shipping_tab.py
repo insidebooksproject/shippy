@@ -2,7 +2,7 @@
 
 import unittest
 
-from shippy_gui import shipping_tab
+from shippy.gui import shipping_tab
 
 
 class LogoPathTests(unittest.TestCase):

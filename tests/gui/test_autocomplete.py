@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 from PySide6.QtWidgets import QApplication, QLineEdit
 
-from shippy_gui.widgets import autocomplete as autocomplete_module
-from shippy_gui.widgets.autocomplete import GoogleMapsCompleter
+from shippy.gui.widgets import autocomplete as autocomplete_module
+from shippy.gui.widgets.autocomplete import GoogleMapsCompleter
 
 
 class AutocompleteWorkerLifetimeTests(unittest.TestCase):
@@ -90,7 +90,7 @@ class AutocompleteWorkerLifetimeTests(unittest.TestCase):
 
     def test_lookup_outliving_the_wait_is_parked_not_dropped(self):
         """A hung lookup must survive its completer being replaced."""
-        from shippy_gui.widgets import autocomplete
+        from shippy.gui.widgets import autocomplete
 
         completer = self._completer(lookup_delay=0.5)
         completer.current_text = "123 Main"

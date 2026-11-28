@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
 
-from shippy_gui.core.models import AutocompletePrediction, ParsedAddress
+from shippy.gui.core.models import AutocompletePrediction, ParsedAddress
 
 logger = logging.getLogger(__name__)
 

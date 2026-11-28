@@ -8,13 +8,13 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from shippy_gui.core.config import initialize_config_file, resolve_log_path
-from shippy_gui.core.constants import (
+from shippy.gui.core.config import initialize_config_file, resolve_log_path
+from shippy.gui.core.constants import (
     DEFAULT_PARCEL_HEIGHT_IN,
     DEFAULT_PARCEL_LENGTH_IN,
     DEFAULT_PARCEL_WIDTH_IN,
 )
-from shippy_gui.core.models import Config
+from shippy.gui.core.models import Config
 
 BASE_CONFIG_DICT = {
     "easypost": {"apikey": "ep_test"},
@@ -31,7 +31,7 @@ class ConfigHelperTests(unittest.TestCase):
             config_path = Path(tmpdir) / "config.ini"
 
             with patch(
-                "shippy_gui.core.config.load_packaged_example_config",
+                "shippy.gui.core.config.load_packaged_example_config",
                 return_value="[ui]\nfont_size = 11\n",
             ):
                 initialize_config_file(str(config_path))

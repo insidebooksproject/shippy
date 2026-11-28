@@ -7,15 +7,15 @@ import sys
 from PySide6.QtWidgets import QApplication  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from pydantic import ValidationError
 
-from shippy_gui.core.config import (
+from shippy.gui.core.config import (
     initialize_config_file,
     load_config,
     resolve_log_path,
 )
-from shippy_gui.core.logging import configure_logging
-from shippy_gui.core.font import apply_font_size
-from shippy_gui.main_window import MainWindow
-from shippy_gui.settings_dialog import SettingsDialog
+from shippy.gui.core.logging import configure_logging
+from shippy.gui.core.font import apply_font_size
+from shippy.gui.main_window import MainWindow
+from shippy.gui.settings_dialog import SettingsDialog
 
 
 def main():

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
     QWidget,
 )
 
-from shippy_gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.widgets.shipment_controls import ShipmentControls
 
 logger = logging.getLogger(__name__)
 

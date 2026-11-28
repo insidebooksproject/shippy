@@ -3,7 +3,7 @@
 from typing import Any, Optional
 from pydantic import AnyHttpUrl, BaseModel, field_validator
 
-from shippy_gui.core.constants import (
+from shippy.gui.core.constants import (
     DEFAULT_FONT_SIZE,
     DEFAULT_PARCEL_HEIGHT_IN,
     DEFAULT_PARCEL_LENGTH_IN,

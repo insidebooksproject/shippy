@@ -5,14 +5,14 @@ from unittest.mock import patch
 
 import easypost
 
-from shippy_gui.core.constants import (
+from shippy.gui.core.constants import (
     PARCEL_PREDEFINED_PACKAGE,
     SMALL_BOX_HEIGHT_IN,
     SMALL_BOX_LENGTH_IN,
     SMALL_BOX_WIDTH_IN,
 )
-from shippy_gui.core.models import ParcelConfig
-from shippy_gui.core.services import (
+from shippy.gui.core.models import ParcelConfig
+from shippy.gui.core.services import (
     PurchaseError,
     ShipmentService,
     purchase_may_have_completed,
@@ -26,7 +26,7 @@ class ShipmentServiceTests(unittest.TestCase):
     """Tests for shipment creation via EasyPost."""
 
     def setUp(self):
-        patcher = patch("shippy_gui.core.services.easypost.EasyPostClient")
+        patcher = patch("shippy.gui.core.services.easypost.EasyPostClient")
         self.addCleanup(patcher.stop)
         self.client_class = patcher.start()
         self.client = self.client_class.return_value
@@ -182,8 +182,8 @@ class SmallBoxProblemTests(unittest.TestCase):
     def test_one_cubic_foot_exactly_is_allowed(self):
         self.assertEqual(small_box_problem(18, 12, 8), "")
 
-    @patch("shippy_gui.core.services.SMALL_BOX_LENGTH_IN", 24.0)
-    @patch("shippy_gui.core.services.easypost.EasyPostClient")
+    @patch("shippy.gui.core.services.SMALL_BOX_LENGTH_IN", 24.0)
+    @patch("shippy.gui.core.services.easypost.EasyPostClient")
     def test_invalid_small_box_buys_nothing(self, client_class):
         service = ShipmentService("ep_test", ParcelConfig())
 

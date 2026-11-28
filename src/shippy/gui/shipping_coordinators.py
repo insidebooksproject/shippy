@@ -15,27 +15,27 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
     QWidget,
 )
 
-from shippy_gui.core import label_journal
-from shippy_gui.core.addresses import AddressParser
-from shippy_gui.core.constants import SHIPMENT_SHUTDOWN_WAIT_MS, STATUS_COLORS
-from shippy_gui.core.models import AutocompletePrediction, Config
-from shippy_gui.core.rates import RateSummary
-from shippy_gui.core.services import ShipmentService
-from shippy_gui.core.shipment_workflow import (
+from shippy.gui.core import label_journal
+from shippy.gui.core.addresses import AddressParser
+from shippy.gui.core.constants import SHIPMENT_SHUTDOWN_WAIT_MS, STATUS_COLORS
+from shippy.gui.core.models import AutocompletePrediction, Config
+from shippy.gui.core.rates import RateSummary
+from shippy.gui.core.services import ShipmentService
+from shippy.gui.core.shipment_workflow import (
     ShipmentWorkflow,
     ShipmentWorkflowResult,
     dialog_uncertain_warning,
 )
-from shippy_gui.printing.printer_manager import (
+from shippy.gui.printing.printer_manager import (
     DialogPrintStatus,
     print_image_with_dialog,
 )
-from shippy_gui.widgets.address_form import AddressForm
-from shippy_gui.widgets.autocomplete import GoogleMapsCompleter
-from shippy_gui.widgets.label_queue import show_label_queued
-from shippy_gui.widgets.printer_gate import PrinterGateResult, wait_for_printer
-from shippy_gui.widgets.shipment_controls import ShipmentControls
-from shippy_gui.workers.shipment_worker import ShipmentWorker
+from shippy.gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.autocomplete import GoogleMapsCompleter
+from shippy.gui.widgets.label_queue import show_label_queued
+from shippy.gui.widgets.printer_gate import PrinterGateResult, wait_for_printer
+from shippy.gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.workers.shipment_worker import ShipmentWorker
 
 logger = logging.getLogger(__name__)
 

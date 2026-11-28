@@ -17,8 +17,8 @@ from PySide6.QtGui import QPainter  # type: ignore[import-untyped] # pylint: dis
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QWidget  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
-from shippy_gui.core.constants import PRINT_JOB_NAME, PRINT_TRACK_TIMEOUT_S
-from shippy_gui.printing.models import PrinterInfo
+from shippy.gui.core.constants import PRINT_JOB_NAME, PRINT_TRACK_TIMEOUT_S
+from shippy.gui.printing.models import PrinterInfo
 
 logger = logging.getLogger(__name__)
 

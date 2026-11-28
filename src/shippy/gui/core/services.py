@@ -5,7 +5,7 @@ from typing import Any
 
 import easypost  # type: ignore[import-not-found] # pylint: disable=import-error
 
-from shippy_gui.core.constants import (
+from shippy.gui.core.constants import (
     SHIPMENT_CARRIER,
     SHIPMENT_REFERENCE,
     SHIPMENT_SERVICE,
@@ -16,7 +16,7 @@ from shippy_gui.core.constants import (
     SMALL_BOX_MAX_SIDE_IN,
     SMALL_BOX_WIDTH_IN,
 )
-from shippy_gui.core.models import AddressBase, ParcelConfig
+from shippy.gui.core.models import AddressBase, ParcelConfig
 
 
 class PurchaseError(Exception):

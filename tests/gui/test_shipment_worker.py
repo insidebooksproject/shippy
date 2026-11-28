@@ -4,12 +4,12 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from shippy_gui.core.ibp_server import IbpServerError, IbpServerUnreachable
-from shippy_gui.core.shipment_workflow import (
+from shippy.gui.core.ibp_server import IbpServerError, IbpServerUnreachable
+from shippy.gui.core.shipment_workflow import (
     CHECK_PRINTER_ADVICE,
     PURCHASE_UNCERTAIN_MESSAGE,
 )
-from shippy_gui.workers.shipment_worker import (
+from shippy.gui.workers.shipment_worker import (
     SERVER_BAD_ADDRESS_MESSAGE,
     SERVER_UNREACHABLE_MESSAGE,
     ShipmentWorker,
@@ -29,7 +29,7 @@ class ShipmentWorkerCrashTests(unittest.TestCase):
         )
         worker.workflow = mock.Mock()
         patcher = mock.patch(
-            "shippy_gui.workers.shipment_worker.fetch_return_address",
+            "shippy.gui.workers.shipment_worker.fetch_return_address",
             return_value=mock.sentinel.return_address,
         )
         self.fetch = patcher.start()
@@ -42,7 +42,7 @@ class ShipmentWorkerCrashTests(unittest.TestCase):
         errors: list[str] = []
         worker.error.connect(errors.append)
 
-        with self.assertLogs("shippy_gui.workers.shipment_worker", "ERROR"):
+        with self.assertLogs("shippy.gui.workers.shipment_worker", "ERROR"):
             worker.run()
 
         self.assertEqual(errors, [PURCHASE_UNCERTAIN_MESSAGE])
@@ -57,7 +57,7 @@ class ShipmentWorkerCrashTests(unittest.TestCase):
         errors: list[str] = []
         worker.error.connect(errors.append)
 
-        with self.assertLogs("shippy_gui.workers.shipment_worker", "ERROR"):
+        with self.assertLogs("shippy.gui.workers.shipment_worker", "ERROR"):
             worker.run()
 
         self.assertEqual(
@@ -77,7 +77,7 @@ class ShipmentWorkerReturnAddressTests(ShipmentWorkerCrashTests):
         worker = self.make_worker()
         worker.workflow.prepare_label.side_effect = ValueError("stop here")
 
-        with self.assertLogs("shippy_gui.workers.shipment_worker", "ERROR"):
+        with self.assertLogs("shippy.gui.workers.shipment_worker", "ERROR"):
             worker.run()
 
         self.fetch.assert_called_once_with("http://ibp.test/api")
@@ -96,7 +96,7 @@ class ShipmentWorkerReturnAddressTests(ShipmentWorkerCrashTests):
                 worker.error.connect(errors.append)
 
                 with self.assertLogs(
-                    "shippy_gui.workers.shipment_worker", "ERROR"
+                    "shippy.gui.workers.shipment_worker", "ERROR"
                 ) as logs:
                     worker.run()
 

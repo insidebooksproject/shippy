@@ -507,7 +507,7 @@ def report_saved_label(
 
 def load_logo() -> Image.Image:
     """Load logo image."""
-    logo_fpath = importlib.resources.files("shippy.assets").joinpath("logo.jpg")
+    logo_fpath = importlib.resources.files("shippy.cli.assets").joinpath("logo.jpg")
     return Image.open(str(logo_fpath))
 
 

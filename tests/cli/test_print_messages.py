@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from shippy import cli, labels
+from shippy.cli import app as cli, labels
 
 LOG_DIR = pathlib.Path("logs")
 SHIPMENT = SimpleNamespace(id="shp_1", tracking_code="9400111")
@@ -21,7 +21,7 @@ ALARMING = ("NOT", "EasyPost", "do not create")
 @pytest.fixture(name="printed")
 def fixture_printed():
     """Capture questionary.print output from the CLI module."""
-    with mock.patch("shippy.cli.questionary.print") as printer:
+    with mock.patch("shippy.cli.app.questionary.print") as printer:
         yield printer
 
 

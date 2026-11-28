@@ -4,7 +4,7 @@ from typing import Optional, Union
 from PySide6.QtCore import Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
-from shippy_gui.core.models import RecipientAddress, ParsedAddress
+from shippy.gui.core.models import RecipientAddress, ParsedAddress
 
 
 class AddressForm(QWidget):

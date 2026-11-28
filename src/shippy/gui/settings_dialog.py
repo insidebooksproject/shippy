@@ -13,8 +13,8 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 from pydantic import ValidationError
 
-from shippy_gui.core.config_manager import ConfigManager
-from shippy_gui.core.constants import (
+from shippy.gui.core.config_manager import ConfigManager
+from shippy.gui.core.constants import (
     DEFAULT_FONT_SIZE,
     DEFAULT_WEIGHT_LBS,
     FONT_SIZE_MAX,
@@ -22,7 +22,7 @@ from shippy_gui.core.constants import (
     WEIGHT_MAX_LBS,
     WEIGHT_MIN_LBS,
 )
-from shippy_gui.core.models import Config
+from shippy.gui.core.models import Config
 
 
 class SettingsDialog(

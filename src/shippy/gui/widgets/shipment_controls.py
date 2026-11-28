@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 from PySide6.QtCore import QTimer, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 import ibp_printing
 
-from shippy_gui.core.constants import (
+from shippy.gui.core.constants import (
     DEFAULT_WEIGHT_LBS,
     PRINTER_POLL_FOUND_MS,
     PRINTER_POLL_MS,
@@ -27,8 +27,8 @@ from shippy_gui.core.constants import (
     WEIGHT_MAX_LBS,
     WEIGHT_MIN_LBS,
 )
-from shippy_gui.printing.models import PrinterInfo
-from shippy_gui.printing.printer_manager import (
+from shippy.gui.printing.models import PrinterInfo
+from shippy.gui.printing.printer_manager import (
     get_available_printers,
 )
 

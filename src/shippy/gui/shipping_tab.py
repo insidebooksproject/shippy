@@ -16,20 +16,20 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 from PySide6.QtCore import Qt, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
-from shippy_gui.core.addresses import AddressParser
-from shippy_gui.core.config_manager import ConfigManager
-from shippy_gui.core.services import ShipmentService
-from shippy_gui.shipping_coordinators import (
+from shippy.gui.core.addresses import AddressParser
+from shippy.gui.core.config_manager import ConfigManager
+from shippy.gui.core.services import ShipmentService
+from shippy.gui.shipping_coordinators import (
     AddressLookupCoordinator,
     ShipmentFlowCoordinator,
     ShippingStatusPresenter,
 )
-from shippy_gui.widgets.autocomplete import (
+from shippy.gui.widgets.autocomplete import (
     GoogleMapsCompleter,
     setup_google_maps_autocomplete,
 )
-from shippy_gui.widgets.address_form import AddressForm
-from shippy_gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.shipment_controls import ShipmentControls
 
 # The bundled logo stamped on labels; assets/ sits inside the package.
 LOGO_PATH = Path(__file__).parent / "assets" / "logo.jpg"

@@ -11,18 +11,18 @@ import easypost  # type: ignore[import-not-found] # pylint: disable=import-error
 import ibp_printing
 from PIL import Image
 
-from shippy_gui.core import label_journal
-from shippy_gui.core.constants import (
+from shippy.gui.core import label_journal
+from shippy.gui.core.constants import (
     LOGO_PASTE_X,
     LOGO_PASTE_Y,
     OUNCES_PER_POUND,
     PRINT_JOB_NAME,
 )
-from shippy_gui.core.misc import grab_png_from_url
-from shippy_gui.core.models import RecipientAddress, ReturnAddressConfig
-from shippy_gui.core.rates import RateSummary, summarize_rates
-from shippy_gui.core.services import PurchaseError, ShipmentService
-from shippy_gui.printing.printer_manager import print_image
+from shippy.gui.core.misc import grab_png_from_url
+from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
+from shippy.gui.core.rates import RateSummary, summarize_rates
+from shippy.gui.core.services import PurchaseError, ShipmentService
+from shippy.gui.printing.printer_manager import print_image
 
 logger = logging.getLogger(__name__)
 

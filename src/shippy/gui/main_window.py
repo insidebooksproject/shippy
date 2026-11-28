@@ -6,11 +6,11 @@ from typing import Optional
 from PySide6.QtGui import QAction  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QStatusBar  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
-from shippy_gui.core.config import get_font_size_from_path
-from shippy_gui.core.font import apply_font_size
-from shippy_gui.settings_dialog import SettingsDialog
-from shippy_gui.shipping_tab import ShippingTab
-from shippy_gui.widgets.label_queue import PendingLabelsIndicator
+from shippy.gui.core.config import get_font_size_from_path
+from shippy.gui.core.font import apply_font_size
+from shippy.gui.settings_dialog import SettingsDialog
+from shippy.gui.shipping_tab import ShippingTab
+from shippy.gui.widgets.label_queue import PendingLabelsIndicator
 
 
 class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods

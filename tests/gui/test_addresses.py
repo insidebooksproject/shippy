@@ -5,13 +5,13 @@ from unittest.mock import Mock
 
 from PySide6.QtWidgets import QApplication
 
-from shippy_gui.core.addresses import (
+from shippy.gui.core.addresses import (
     AddressComponentParser,
     AddressParser,
     GoogleAddressLookup,
 )
-from shippy_gui.core.models import AutocompletePrediction
-from shippy_gui.widgets.address_form import AddressForm
+from shippy.gui.core.models import AutocompletePrediction
+from shippy.gui.widgets.address_form import AddressForm
 
 
 class AddressParserComponentTests(unittest.TestCase):

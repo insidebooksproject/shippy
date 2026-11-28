@@ -8,15 +8,15 @@ from unittest.mock import patch
 
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
-from shippy_gui.core import label_journal
-from shippy_gui.core.models import RecipientAddress
-from shippy_gui.widgets.label_queue import (
+from shippy.gui.core import label_journal
+from shippy.gui.core.models import RecipientAddress
+from shippy.gui.widgets.label_queue import (
     PendingLabelsDialog,
     PendingLabelsIndicator,
     build_label_queued_box,
 )
 
-from journal_fakes import install_fake_journal, make_record
+from .journal_fakes import install_fake_journal, make_record
 
 
 def wait_until(predicate, timeout_s=5.0):
@@ -140,7 +140,7 @@ class PendingLabelsIndicatorTests(unittest.TestCase):
         indicator = PendingLabelsIndicator(fetch=flaky)
         indicator.refresh()
         wait_until(lambda: not indicator.busy)
-        with self.assertLogs("shippy_gui.widgets.label_queue", "ERROR"):
+        with self.assertLogs("shippy.gui.widgets.label_queue", "ERROR"):
             indicator.refresh()
             wait_until(lambda: not indicator.busy)
         self.assertEqual(indicator.text(), "Waiting to print: 1")
@@ -194,7 +194,7 @@ class PendingLabelsIndicatorTests(unittest.TestCase):
         indicator.refresh()
         wait_until(lambda: not indicator.busy)
         with patch(
-            "shippy_gui.widgets.label_queue.PendingLabelsDialog.exec"
+            "shippy.gui.widgets.label_queue.PendingLabelsDialog.exec"
         ) as mock_exec:
             indicator.click()
         mock_exec.assert_called_once_with()

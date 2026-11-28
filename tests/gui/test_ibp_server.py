@@ -5,7 +5,7 @@ from unittest import mock
 
 import requests
 
-from shippy_gui.core.ibp_server import (
+from shippy.gui.core.ibp_server import (
     IbpServerError,
     IbpServerUnreachable,
     fetch_return_address,
@@ -34,7 +34,7 @@ def response(body, status=200):
     return fake
 
 
-@mock.patch("shippy_gui.core.ibp_server.requests.get")
+@mock.patch("shippy.gui.core.ibp_server.requests.get")
 class FetchReturnAddressTests(unittest.TestCase):
     """fetch_return_address() against a mocked server."""
 

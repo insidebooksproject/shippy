@@ -7,7 +7,7 @@ from pathlib import Path
 
 import ibp_printing
 
-from shippy_gui.core.constants import LOG_BACKUP_COUNT, LOG_MAX_BYTES
+from shippy.gui.core.constants import LOG_BACKUP_COUNT, LOG_MAX_BYTES
 
 
 def configure_logging(log_path: str) -> Path:

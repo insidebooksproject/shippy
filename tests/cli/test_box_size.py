@@ -6,8 +6,8 @@ from unittest import mock
 
 from pydantic import ValidationError
 
-from shippy import cli, console, shipping
-from shippy.models import ParcelConfig
+from shippy.cli import app as cli, console, shipping
+from shippy.cli.models import ParcelConfig
 
 CUBE = (12.0, 12.0, 12.0)
 
