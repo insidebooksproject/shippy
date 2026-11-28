@@ -155,7 +155,11 @@ class MainLoopTests(MainLoopCase):
         self.assertEqual(self.client.shipment.buy.call_count, 2)
         self.assertNotIn("Failed to verify address", self.printed_text())
         # The return address's failed check only warns; it isn't retried.
-        self.assertIn("Failed to verify return address", self.printed_text())
+        self.assertIn(
+            "Failed to verify return address, consider double-checking before "
+            "shipping.",
+            self.printed_text(),
+        )
 
 
 class ApiErrorTests(MainLoopCase):

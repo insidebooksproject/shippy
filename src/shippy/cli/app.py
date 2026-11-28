@@ -93,7 +93,7 @@ def build_unit_choices(units: list[dict]) -> dict[str, tuple[str, str]]:
 
 
 def generate_addresses_bulk(config: Config):
-    """Generate addresses for bulk postage."""
+    """Generate addresses for bulk shipping."""
     server = Server.from_config(config.ibp)
 
     recipient_name = fetch_until_ok(
@@ -270,7 +270,7 @@ def check_request_address(
 
 
 def generate_addresses_individual(config: Config):
-    """Generate addresses for individual postage."""
+    """Generate addresses for individual shipping."""
     server = Server.from_config(config.ibp)
 
     while True:
@@ -305,7 +305,7 @@ def generate_addresses_individual(config: Config):
 
 
 def generate_addresses_manual(config: Config):
-    """Generate addresses for manual postage."""
+    """Generate addresses for manual shipping."""
     gmaps = googlemaps.Client(key=config.googlemaps.apikey)
 
     while True:
@@ -632,7 +632,7 @@ def ship(args: argparse.Namespace) -> None:
         )
     except easypost.errors.InvalidRequestError:
         questionary.print(
-            "  Failed to verify return address, consider double-checking before postage.",
+            "  Failed to verify return address, consider double-checking before shipping.",
             style="fg:yellow",
         )
 
@@ -805,7 +805,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
 
 
 def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
-    """Check a recipient address with EasyPost; a failure never blocks postage.
+    """Check a recipient address with EasyPost; a failure never blocks shipping.
 
     Only a typed address (``typed``, manual mode) is something the volunteer
     can double-check, so only then is the check shown. Addresses from the IBP
@@ -827,7 +827,7 @@ def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
         if typed:
             questionary.print(
                 "  Failed to verify address, consider double-checking before "
-                "postage.",
+                "shipping.",
                 style=WARNING_STYLE,
             )
 

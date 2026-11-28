@@ -377,7 +377,10 @@ def test_verify_address_failure_shown_only_for_typed(printed, typed):
     client.address.verify.side_effect = easypost.errors.InvalidRequestError("bad")
     cli.verify_address(client, mock.Mock(id="adr_1"), typed=typed)
     client.address.verify.assert_called_once_with("adr_1")
-    shown = "Failed to verify address" in printed_text(printed)
+    shown = (
+        "Failed to verify address, consider double-checking before shipping."
+        in printed_text(printed)
+    )
     assert shown is typed
 
 
