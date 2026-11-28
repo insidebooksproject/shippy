@@ -1,6 +1,7 @@
 """Shared fixtures: canned IBP server responses and an HTTP mock."""
 
 import json
+import pathlib
 import typing
 from unittest import mock
 
@@ -95,3 +96,42 @@ def fixture_http() -> typing.Iterator[FakeHttp]:
     fake = FakeHttp()
     with mock.patch("shippy.core.ibp_server.requests.get", side_effect=fake.get):
         yield fake
+
+
+@pytest.fixture(name="app_log_dir")
+def fixture_app_log_dir(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> typing.Iterator[pathlib.Path]:
+    """Let ``shippy.core.log.start_logging`` run for real, in a temporary folder.
+
+    Points ibp-printing's default log directory there, and afterwards removes the handlers it added and puts the exception
+    hooks back, so nothing outlives the test.
+    """
+    # pylint: disable=import-outside-toplevel,protected-access
+    import logging
+    import sys
+    import threading
+
+    from ibp_printing import log as printing_log
+
+    from shippy.core import log
+
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(printing_log, "default_log_dir", lambda: log_dir)
+    monkeypatch.setattr(log, "_hooks_installed", False)
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+    loggers = [logging.getLogger(), logging.getLogger(printing_log.LOGGER_NAME)]
+    before = {id(logger): list(logger.handlers) for logger in loggers}
+    package_level = loggers[1].level
+    configured = set(printing_log._CONFIGURED_DIRS)
+    try:
+        yield log_dir
+    finally:
+        for logger in loggers:
+            for handler in logger.handlers[:]:
+                if handler not in before[id(logger)]:
+                    logger.removeHandler(handler)
+                    handler.close()
+        loggers[1].setLevel(package_level)
+        printing_log._CONFIGURED_DIRS.intersection_update(configured)
