@@ -130,13 +130,15 @@ already in hand and never stops a purchase.
 
 Printing is handled by `ibp-printing`. A supported printer (the PM2411BT the
 shipping laptops use) is printed to directly over USB, with no print queue or
-naming rule, and is tried first. Any other printer is used through a print
-queue (Windows, or CUPS on Linux) only when **both** of these hold:
+naming rule, and is tried first. On Linux that is the only way to print:
+there are no print queues (ibp-printing dropped CUPS on 2026-11-26). On
+Windows, any other printer is used through a local print queue only when
+**both** of these hold:
 
 1. The queue name ends in the printer's USB `VID:PID`, separated from the rest of
    the name by a space, tab, `_` or `-` — e.g. `DYMO LabelWriter 450 0922:0028`.
-   On Windows only local print queues are considered (USB label printers are
-   local; network printer connections are skipped so a dead print server cannot
+   Only local print queues are considered (USB label printers are local;
+   network printer connections are skipped so a dead print server cannot
    stall printing).
 2. A USB device with that `VID:PID` is currently plugged in.
 
