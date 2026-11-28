@@ -13,11 +13,11 @@ repos:
         pass_filenames: false
       - id: black-check
         name: black --check (uv)
-        entry: uv run black --check src
+        entry: uv run black --check src tests
         language: system
         pass_filenames: false
-      - id: unittest
-        name: unittest (uv)
-        entry: env QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests
+      - id: pytest
+        name: pytest (uv)
+        entry: uv run pytest -q
         language: system
         pass_filenames: false
