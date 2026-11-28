@@ -249,13 +249,48 @@ class ApiErrorTests(MainLoopCase):
         ]
         self.run_main()
 
-        self.assertIn("Can't reach the IBP server.", self.printed_text())
-        self.assertIn("press Enter to try again", self.printed_text())
+        self.assertIn(
+            "Can't reach the IBP server. Check the internet connection, then "
+            "press Enter to try again (Ctrl+C to quit).",
+            self.printed_text(),
+        )
         self.input.assert_called_once()
         self.assertEqual(self.client.shipment.buy.call_count, 2)
 
+    def test_return_address_rejected_by_easypost_asks_for_a_coordinator(self):
+        self.client.address.create.side_effect = [
+            easypost.errors.InvalidRequestError("Invalid zip.", http_status=422),
+            mock.DEFAULT,
+            mock.DEFAULT,
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn(
+            "EasyPost rejected the return address from the IBP server: Invalid "
+            "zip. Tell a coordinator; press Enter to try again (Ctrl+C to quit).",
+            self.printed_text(),
+        )
+        self.assertNotIn("Can't reach", self.printed_text())
+        self.input.assert_called_once()
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
+
+    def test_return_address_refused_by_server_asks_for_a_coordinator(self):
+        self.server.return_address.side_effect = [
+            ServerError(404, "Not Found"),
+            dict(ADDRESS),
+        ]
+        self.run_main()
+
+        self.assertIn(
+            "The IBP server turned down the request for the return address: Not "
+            "Found. Tell a coordinator; press Enter to try again (Ctrl+C to quit).",
+            self.printed_text(),
+        )
+        self.input.assert_called_once()
+
     def test_ctrl_c_at_return_address_retry_quits(self):
-        self.server.return_address.side_effect = ServerError(503, "unavailable")
+        self.server.return_address.side_effect = ServerError(404, "Not Found")
         self.input.side_effect = KeyboardInterrupt
         with self.assertLogs("ibp_printing.shippy", "ERROR"):
             with self.assertRaises(SystemExit) as exited:

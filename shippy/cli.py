@@ -108,9 +108,12 @@ def generate_addresses_bulk(config: Config):
     recipient_name = fetch_until_ok(
         "Grabbing shipping settings from IBP server",
         lambda: server.shipping_settings()["unit_recipient_name"],
+        what="the shipping settings",
     )
     units = build_unit_choices(
-        fetch_until_ok("Grabbing units list from IBP server", server.units)
+        fetch_until_ok(
+            "Grabbing units list from IBP server", server.units, what="the units list"
+        )
     )
 
     while True:
@@ -628,6 +631,7 @@ def ship(args: argparse.Namespace) -> None:
     from_addr = fetch_until_ok(
         "Grabbing return address from IBP server",
         lambda: shipping.build_address(easypost_client, **server.return_address()),
+        what="the return address",
     )
 
     try:
@@ -654,12 +658,14 @@ def ship(args: argparse.Namespace) -> None:
         report_pending_labels()
 
 
-def fetch_until_ok(message: str, fetch: typing.Callable[[], T]) -> T:
+def fetch_until_ok(message: str, fetch: typing.Callable[[], T], *, what: str) -> T:
     """Run a startup step that needs the IBP server or EasyPost until it works.
 
     Nothing can be shipped without it, so a failure doesn't end shippy: as
-    with the printer gate, the volunteer fixes the connection and presses
-    Enter to try again, or Ctrl+C to quit.
+    with the printer gate, the volunteer fixes the connection (or gets a
+    coordinator, when the request was turned down) and presses Enter to try
+    again, or Ctrl+C to quit. ``what`` names the data for the message, e.g.
+    "the return address".
     """
     while True:
         try:
@@ -667,14 +673,9 @@ def fetch_until_ok(message: str, fetch: typing.Callable[[], T]) -> T:
                 return fetch()
         except (*SERVER_ERRORS, easypost.errors.EasyPostError) as exc:
             logger.error("%s failed", message, exc_info=exc)
-            service = (
-                "EasyPost"
-                if isinstance(exc, easypost.errors.EasyPostError)
-                else "the IBP server"
-            )
             questionary.print(
-                f"  Can't reach {service}. Check the internet connection, then "
-                "press Enter to try again (Ctrl+C to quit).",
+                f"  {startup_failure(exc, what)} press Enter to try again "
+                "(Ctrl+C to quit).",
                 style="fg:red",
             )
 
@@ -682,6 +683,21 @@ def fetch_until_ok(message: str, fetch: typing.Callable[[], T]) -> T:
             input()
         except KeyboardInterrupt:
             sys.exit(130)
+
+
+def startup_failure(exc: Exception, what: str) -> str:
+    """What went wrong fetching ``what``, and what to do before trying again."""
+    on_easypost = isinstance(exc, easypost.errors.EasyPostError)
+    if not is_refusal(exc):
+        service = "EasyPost" if on_easypost else "the IBP server"
+        return f"Can't reach {service}. Check the internet connection, then"
+
+    reason = str(getattr(exc, "detail", None) or getattr(exc, "message", exc))
+    if on_easypost:
+        problem = f"EasyPost rejected {what} from the IBP server"
+    else:
+        problem = f"The IBP server turned down the request for {what}"
+    return f"{problem}: {reason.rstrip('.')}. Tell a coordinator;"
 
 
 def report_server_unreachable(exc: requests.RequestException) -> None:
@@ -700,16 +716,16 @@ class PurchaseFailed(Exception):
         self.error = error
 
 
-def purchase_may_have_completed(exc: Exception) -> bool:
-    """Whether a buy that raised ``exc`` may still have bought the label.
+def is_refusal(exc: Exception) -> bool:
+    """Whether EasyPost or the IBP server definitely turned the request down.
 
-    A 4xx answer (other than a timeout) means EasyPost turned the purchase
-    down, e.g. for an empty wallet. No answer, a timeout or a 5xx may have
-    come after the charge went through.
+    A 4xx answer (other than a timeout) is a refusal, e.g. EasyPost's for an
+    empty wallet: trying again won't help, and a refused buy bought nothing.
+    No answer, a timeout or a 5xx may be temporary, and a buy that failed that
+    way may have gone through.
     """
-    status = getattr(exc, "http_status", None)
-    refused = isinstance(status, int) and 400 <= status < 500 and status != 408
-    return not refused
+    status = getattr(exc, "http_status", None) or getattr(exc, "status_code", None)
+    return isinstance(status, int) and 400 <= status < 500 and status != 408
 
 
 def report_shipping_error(
@@ -780,7 +796,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
         report_shipping_error(
             failed.error,
             reference,
-            maybe_bought=purchase_may_have_completed(failed.error),
+            maybe_bought=not is_refusal(failed.error),
         )
         return
     except easypost.errors.EasyPostError as exc:
