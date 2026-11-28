@@ -6,6 +6,7 @@ from typing import Optional, TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from shippy.core.redact import describe_config_error
 from shippy.gui.core.config import load_config, resolve_config_paths
 from shippy.gui.core.models import Config
 
@@ -71,6 +72,7 @@ class ConfigManager:
                 "Config Validation Error",
                 f"Error loading configuration:\n\n{e}",
                 parent_widget,
+                e,
             )
             return False
         except (configparser.Error, OSError) as e:
@@ -78,6 +80,7 @@ class ConfigManager:
                 "Config Load Error",
                 f"Error reading configuration file:\n\n{e}",
                 parent_widget,
+                e,
             )
             return False
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -85,6 +88,7 @@ class ConfigManager:
                 "Config Load Error",
                 f"Unexpected error loading configuration:\n\n{e}",
                 parent_widget,
+                e,
             )
             return False
 
@@ -131,6 +135,7 @@ class ConfigManager:
                 "Save Error",
                 f"Error saving configuration:\n\n{e}",
                 parent_widget,
+                e,
             )
             return False
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -138,11 +143,16 @@ class ConfigManager:
                 "Save Error",
                 f"Unexpected error saving configuration:\n\n{e}",
                 parent_widget,
+                e,
             )
             return False
 
     def _handle_error(
-        self, title: str, message: str, parent_widget: Optional["QWidget"]
+        self,
+        title: str,
+        message: str,
+        parent_widget: Optional["QWidget"],
+        error: Exception,
     ) -> None:
         """Handle an error by logging and optionally showing a dialog.
 
@@ -150,8 +160,16 @@ class ConfigManager:
             title: Error dialog title.
             message: Error message.
             parent_widget: Optional parent widget for dialog.
+            error: The exception. The log gets only its description: the
+                message can repeat config.ini's lines or values (API keys).
         """
-        logger.error("%s: %s", title, message)
+        expected = isinstance(error, (ValidationError, configparser.Error, OSError))
+        logger.error(
+            "%s: %s",
+            title,
+            describe_config_error(error),
+            exc_info=None if expected else error,
+        )
         if parent_widget is not None:
             from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disable=no-name-in-module,import-outside-toplevel
                 QMessageBox,

@@ -766,7 +766,8 @@ class ShippingCoordinatorTests(unittest.TestCase):
             lambda: None
         )  # pylint: disable=protected-access
 
-        coordinator.create_label()
+        with self.assertLogs("shippy.gui", "ERROR"):
+            coordinator.create_label()
 
         self.assertEqual(workers, [])
         controls.clear_small_box.assert_called_once_with()

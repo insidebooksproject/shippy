@@ -36,7 +36,8 @@ src/shippy/
     ibp_server.py        # IBP server client (Server, ServerError, JURISDICTIONS)
     label_image.py       # label PNG download, the IBP logo and where it goes
     label_journal.py     # ibp-printing label journal glue (identity/key, statuses)
-    log.py               # app names (journal app=, printer-<app> logs), printer log setup
+    log.py               # app names (journal app=, printer-<app> logs), log setup, error log
+    redact.py            # keeping keys and config text out of the uploaded logs
     models.py            # config models: [ibp], [easypost], [googlemaps], [parcel]
     postage.py           # EasyPost address fields, shipment quote/buy, references
     printers.py          # which printers postage may go to (no package-label printers)
@@ -182,6 +183,27 @@ or startup code. If you cannot run a meaningful check, say so.
   ibp-printing's logger, so its records reach the running app's printer logs
   (the CLI has no other log file); shippy-gui also adds its own rotating log
   file (`gui/core/logging.py`), which gets INFO+ records including printer ones.
+- Error log (`meta` repo's `docs/error-reporting.md`): both apps call
+  `shippy.core.log.start_logging(app)` first thing in `main()` (before Qt and
+  the config): printer logs with `app_version()`, ibp-printing's
+  `configure_error_log` (`errors-<app>.jsonl`, WARNING+ from every logger),
+  the exception hooks (chained, Ctrl+C not logged; PySide6 sends slot,
+  `QThread.run` and `QRunnable.run` exceptions through `sys.excepthook`) and
+  an INFO `<app> starting` line. Rules: every error dialog or red CLI message
+  has an ERROR log line (with `exc_info` when there is an exception); handled
+  normal cases (a 4xx for an unknown code, a search that found nothing, form
+  validation) log at INFO; name requests and labels by code, tracking or
+  EasyPost ID, never the inmate's name or address, and never log config
+  values or lines (`shippy.core.redact.describe_validation_error`,
+  `describe_config_error`). Never log `str()` or `exc_info` of a Google Maps
+  error (its text is the request URL: the API key and what was typed): use
+  `core/addresses.log_maps_error`/`describe_maps_error` (ApiError at ERROR,
+  timeouts and network errors at WARNING). `start_logging` also runs every
+  file in the uploaded log directory through `redact.scrub_secrets` (the
+  backstop for `key=...` and Google Maps queries). Tests:
+  `tests/cli/conftest.py` stubs `start_logging`; the `app_log_dir` fixture
+  runs it for real in a temp folder; `tests/maps_errors.py` builds a
+  TransportError that leaks the way the real one does.
 - shippy-gui: preserve the PySide6 signal/slot patterns; network operations
   (EasyPost, Google Maps) run in `QThread` workers to keep the UI non-blocking.
 - Tests fake printers with `ibp_printing.set_backend(FakeBackend())` (see `tests/gui/test_printer_manager.py`); reset with `set_backend(None)`. Tests never touch the real journal: use `tests/gui/journal_fakes.install_fake_journal(self)`, mock `shippy.core.label_journal.ibp_printing`, or `ibp_printing.labels.set_journal_path(tmp)` when calling the real `save_for_retry`.

@@ -18,3 +18,14 @@ def fixture_plain_text_output() -> typing.Iterator[None]:
     """
     with create_app_session(output=PlainTextOutput(sys.stdout)):
         yield
+
+
+@pytest.fixture(autouse=True)
+def fixture_no_app_logging(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep main() from writing real logs or replacing the exception hooks.
+
+    ``start_logging`` adds files in the machine's log directory and hooks
+    that last for the whole test run; ``tests/core/test_log.py`` tests it
+    with a temporary directory.
+    """
+    monkeypatch.setattr("shippy.cli.app.start_logging", lambda _app: None)

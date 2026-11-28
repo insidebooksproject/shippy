@@ -10,6 +10,11 @@ import questionary
 from prompt_toolkit.completion import Completer, Completion, ThreadedCompleter
 from prompt_toolkit.document import Document
 
+from shippy.core.addresses import MAPS_ERRORS, log_maps_error
+from shippy.core.log import get_logger
+
+logger = get_logger(__name__)
+
 
 class GoogleMapsCompleter(Completer):
     """Address completer that uses Google Maps."""
@@ -50,11 +55,8 @@ class GoogleMapsCompleter(Completer):
                     places_autocomplete = self.gmaps.places_autocomplete(
                         input_text=text, components={"country": "US"}
                     )
-                except (
-                    googlemaps.exceptions.ApiError,
-                    googlemaps.exceptions.Timeout,
-                    googlemaps.exceptions.TransportError,
-                ):
+                except MAPS_ERRORS as error:
+                    log_maps_error(logger, "Google Maps address suggestions", error)
                     places_autocomplete = []
 
                 predictions = [
