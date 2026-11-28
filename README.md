@@ -383,9 +383,12 @@ app, to `errors-shippy.jsonl` or `errors-shippy-gui.jsonl` in the same
 folder (one JSON object per line, in ibp-printing's format with the app and
 its version). The stations' log upload copies the folder to the IBP server,
 where a weekly digest sums these up. Every error a volunteer is shown is
-logged there with its exception; normal answers (an unknown request code, a
+logged there; normal answers (an unknown request code, a
 search that found nothing, a refused setting) are not, and requests are
-named by their code, never by the inmate's name or address. Uncaught
+named by their code, never by the inmate's name or address. API keys,
+config.ini lines and Google Maps request URLs (which hold the key and the
+typed address) are kept out of every file in the folder: a failed Google Maps
+request is logged by its type and status only. Uncaught
 exceptions, including ones in shippy-gui's Qt slots and worker threads, are
 logged too (Ctrl+C isn't). At startup each app logs `shippy starting` or
 `shippy-gui starting` to its printer log with its version: the package
