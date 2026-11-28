@@ -29,7 +29,7 @@ from PIL import Image
 
 from shippy.core import label_journal, postage, purchase
 from shippy.core.ibp_server import Server, ServerError, to_easypost_address
-from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
+from shippy.core.log import CLI_APP, DIAG_APP, configure_logging, start_logging
 from shippy.core.label_image import (
     add_logo,
     build_tempfile,
@@ -119,7 +119,7 @@ def generate_addresses_bulk(config: Config):
             with console.task_message("Grabbing unit address from IBP server"):
                 unit_data = server.unit(jurisdiction, name)
         except ServerError as exc:
-            questionary.print(f"  {exc.detail}", style="fg:red")
+            report_server_refusal(exc, reference)
             continue
         except requests.RequestException as exc:
             report_server_unreachable(exc)
@@ -241,10 +241,10 @@ def check_request_address(
     )
 
     if address.get("inmate_status") == INMATE_NOT_LISTED:
-        logger.warning(
-            "TDCJ no longer lists %s (request %s); not shipping",
-            address["name"],
-            address.get("request_id"),
+        # Handled (nothing is bought), so not a warning; the code, not the name.
+        logger.info(
+            "TDCJ no longer lists the inmate for %s; not shipping",
+            address.get("code") or address.get("request_id"),
         )
         questionary.print(
             "  TDCJ no longer lists this inmate (they may have been released). "
@@ -283,7 +283,7 @@ def generate_addresses_individual(config: Config):
             with console.task_message("Grabbing address from IBP server"):
                 address = fetch_request_address(server, request_id)
         except ServerError as exc:
-            questionary.print(f"  {exc.detail}", style="fg:red")
+            report_server_refusal(exc, request_label(request_id))
             continue
         except requests.RequestException as exc:
             report_server_unreachable(exc)
@@ -569,6 +569,9 @@ def main():
         parser.error("--config is required for shipping commands")
 
     try:
+        # The error log, the exception hooks and the starting line, before
+        # anything that can fail (reading the config included).
+        start_logging(CLI_APP)
         ship(args)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         close_after_unexpected_error(exc)
@@ -578,11 +581,11 @@ def close_after_unexpected_error(exc: Exception) -> typing.NoReturn:
     """Last resort: log an error nothing else handled, then close on Enter.
 
     Without the pause the console window would close before anyone could
-    read what happened. This is also where ibp-printing's
-    ``install_exception_hooks`` and ``configure_error_log`` belong once shippy
-    sets them up.
+    read what happened. Logged at CRITICAL, so it also reaches
+    ``errors-shippy.jsonl``; anything that escapes even this (Ctrl+C aside)
+    is logged by the exception hooks ``start_logging`` installed.
     """
-    # Safe to call again; also covers a failure before logging was set up.
+    # Safe to call again; also covers a failure while logging was set up.
     log_dir = configure_logging(CLI_APP)
     logger.critical("unexpected error; closing shippy", exc_info=exc)
     questionary.print(
@@ -633,7 +636,8 @@ def ship(args: argparse.Namespace) -> None:
             what="the return address",
             not_retried=(easypost.errors.InvalidRequestError,),
         )
-    except easypost.errors.InvalidRequestError:
+    except easypost.errors.InvalidRequestError as exc:
+        logger.warning("could not verify the return address %s: %s", from_addr.id, exc)
         questionary.print(
             "  Failed to verify return address, consider double-checking before shipping.",
             style="fg:yellow",
@@ -702,6 +706,24 @@ def startup_failure(exc: Exception, what: str) -> str:
     else:
         problem = f"The IBP server turned down the request for {what}"
     return f"{problem}: {reason.rstrip('.')}. Tell a coordinator;"
+
+
+def request_label(request_id: typing.Union[typing.Tuple[str, int, int], int]) -> str:
+    """How a scanned request is named in the log: its code, never a name."""
+    if isinstance(request_id, tuple):
+        jurisdiction, inmate_id, index = request_id
+        return f"{jurisdiction.strip().upper()}-{inmate_id:08d}-{index}"
+    return f"request {request_id}"
+
+
+def report_server_refusal(exc: ServerError, what: str) -> None:
+    """Show the reason the IBP server gave for refusing a package's address.
+
+    A 4xx is the server's normal answer for e.g. an unknown request code, so
+    it is logged at INFO, not as an error.
+    """
+    logger.info("IBP server answered %s for %s: %s", exc.status_code, what, exc.detail)
+    questionary.print(f"  {exc.detail}", style="fg:red")
 
 
 def report_server_unreachable(exc: requests.RequestException) -> None:
