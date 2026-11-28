@@ -211,7 +211,8 @@ checked at startup, shippy waits: press Enter to try again, or Ctrl+C to
 quit (exit status 130). It says it can't reach the IBP server or EasyPost,
 or, when one of them turned the request down (e.g. EasyPost rejected the
 return address), gives the reason and asks for a coordinator. Any other
-error it didn't expect is logged, and shippy says "shippy hit a problem it
+error it didn't expect is logged (also to `errors-shippy.jsonl`, see
+[Logs](#logs)), and shippy says "shippy hit a problem it
 didn't expect. The details are in <log folder>. Press Enter to close." before
 exiting with status 1.
 
@@ -376,6 +377,19 @@ shippy writes `printer-shippy.log` (human-readable) and `printer-shippy.jsonl`
 files in the same folder (`shippy diagnose-printer` writes `printer-diag.*`).
 Printer messages at INFO and above also reach shippy-gui's own log file
 (`ui.log_file`). Collect both files after any printing incident.
+
+Each app also writes every warning and error it logs, from any part of the
+app, to `errors-shippy.jsonl` or `errors-shippy-gui.jsonl` in the same
+folder (one JSON object per line, in ibp-printing's format with the app and
+its version). The stations' log upload copies the folder to the IBP server,
+where a weekly digest sums these up. Every error a volunteer is shown is
+logged there with its exception; normal answers (an unknown request code, a
+search that found nothing, a refused setting) are not, and requests are
+named by their code, never by the inmate's name or address. Uncaught
+exceptions, including ones in shippy-gui's Qt slots and worker threads, are
+logged too (Ctrl+C isn't). At startup each app logs `shippy starting` or
+`shippy-gui starting` to its printer log with its version: the package
+version plus the git commit uv installed it from (e.g. `0.1.0+gb8ac3af`).
 
 ### Troubleshooting the label printer
 
