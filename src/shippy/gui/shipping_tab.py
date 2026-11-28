@@ -2,7 +2,6 @@
 
 # pylint: disable=duplicate-code  # Intentional patterns shared with settings_dialog
 
-from pathlib import Path
 from typing import Optional
 
 import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 from PySide6.QtCore import Qt, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
+from shippy.core.misc import LOGO_PATH
 from shippy.gui.core.addresses import AddressParser
 from shippy.gui.core.config_manager import ConfigManager
 from shippy.gui.core.services import ShipmentService
@@ -30,9 +30,6 @@ from shippy.gui.widgets.autocomplete import (
 )
 from shippy.gui.widgets.address_form import AddressForm
 from shippy.gui.widgets.shipment_controls import ShipmentControls
-
-# The bundled logo stamped on labels; assets/ sits inside the package.
-LOGO_PATH = Path(__file__).parent / "assets" / "logo.jpg"
 
 
 class ShippingTab(QWidget):

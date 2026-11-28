@@ -27,16 +27,6 @@ PRINTER_POLL_FOUND_MS = 10_000
 
 
 # ============================================================================
-# Label Constants
-# ============================================================================
-
-# Logo overlay position on shipping label (in pixels)
-# Positioned in the lower-right area of a standard 4x6 shipping label
-LOGO_PASTE_X = 450
-LOGO_PASTE_Y = 425
-
-
-# ============================================================================
 # UI Constants
 # ============================================================================
 

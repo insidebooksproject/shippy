@@ -5,7 +5,6 @@ import collections
 import configparser
 import contextlib
 import datetime
-import importlib.resources
 import os
 import pathlib
 import subprocess
@@ -30,7 +29,7 @@ from ibp_printing.log import get_logger
 from PIL import Image
 
 from . import console, labels, printer_gate, shipping
-from shippy.core.misc import build_tempfile, grab_png_from_url
+from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
 from .models import Config
 from .server import Server, ServerError, to_easypost_address
 
@@ -440,7 +439,7 @@ def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
     with console.task_message("Downloading label"):
         image = grab_png_from_url(shipment.postage_label.label_url)
         if logo is not None:
-            image.paste(logo, (450, 425))
+            add_logo(image, logo)
     return image
 
 
@@ -503,12 +502,6 @@ def report_saved_label(
         f"  Printer logs: {log_dir}",
         style=WARNING_STYLE,
     )
-
-
-def load_logo() -> Image.Image:
-    """Load logo image."""
-    logo_fpath = importlib.resources.files("shippy.cli.assets").joinpath("logo.jpg")
-    return Image.open(str(logo_fpath))
 
 
 def load_config(filepath: pathlib.Path) -> Config:

@@ -13,12 +13,10 @@ from PIL import Image
 
 from shippy.gui.core import label_journal
 from shippy.gui.core.constants import (
-    LOGO_PASTE_X,
-    LOGO_PASTE_Y,
     OUNCES_PER_POUND,
     PRINT_JOB_NAME,
 )
-from shippy.core.misc import grab_png_from_url
+from shippy.core.misc import add_logo, grab_png_from_url
 from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
 from shippy.gui.core.rates import RateSummary, summarize_rates
 from shippy.gui.core.services import PurchaseError, ShipmentService
@@ -153,7 +151,7 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
             if workflow_input.logo_path and os.path.exists(workflow_input.logo_path):
                 progress("Adding logo...")
                 with Image.open(workflow_input.logo_path) as logo:
-                    image.paste(logo, (LOGO_PASTE_X, LOGO_PASTE_Y))
+                    add_logo(image, logo)
 
             return ShipmentWorkflowResult(
                 status=ShipmentWorkflowStatus.READY,

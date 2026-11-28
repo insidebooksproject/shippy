@@ -4,7 +4,9 @@ import os
 import unittest
 from unittest.mock import patch
 
-from shippy.core.misc import build_tempfile
+from PIL import Image
+
+from shippy.core.misc import LOGO_POSITION, add_logo, build_tempfile, load_logo
 
 
 class BuildTempfileTests(unittest.TestCase):
@@ -35,6 +37,25 @@ class BuildTempfileTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 with build_tempfile(suffix=".png"):
                     self.fail("body must not run when creation fails")
+
+
+class LogoTests(unittest.TestCase):
+    """The IBP logo both apps stamp on their labels."""
+
+    def test_the_logo_ships_with_the_package(self):
+        with load_logo() as logo:
+            logo.load()
+            self.assertGreater(logo.width, 0)
+
+    def test_add_logo_pastes_it_at_the_label_position(self):
+        label = Image.new("RGB", (800, 1200), "white")
+        logo = Image.new("RGB", (10, 10), "black")
+
+        add_logo(label, logo)
+
+        x, y = LOGO_POSITION
+        self.assertEqual(label.getpixel((x, y)), (0, 0, 0))
+        self.assertEqual(label.getpixel((x - 1, y - 1)), (255, 255, 255))
 
 
 if __name__ == "__main__":
