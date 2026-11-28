@@ -4,6 +4,7 @@ The CLI's ``manual`` mode and shippy-gui both turn the address a volunteer
 picked (or typed) into street, city, state and ZIP fields here.
 """
 
+import logging
 from typing import Any, Optional
 
 import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
@@ -12,6 +13,44 @@ from pydantic import BaseModel
 from shippy.core.log import get_logger
 
 logger = get_logger(__name__)
+
+# What a Google Maps request raises when it fails; an empty result is not one.
+MAPS_ERRORS = (
+    googlemaps.exceptions.ApiError,
+    googlemaps.exceptions.Timeout,
+    googlemaps.exceptions.TransportError,
+)
+
+
+def describe_maps_error(error: BaseException) -> str:
+    """A Google Maps failure for the log: its type and status, nothing else.
+
+    Never ``str(error)``: a ``TransportError`` repeats the request URL, which
+    holds the API key and what the volunteer typed.
+    """
+    if isinstance(error, googlemaps.exceptions.ApiError):
+        return f"ApiError {error.status}"
+    if isinstance(error, googlemaps.exceptions.HTTPError):
+        return f"HTTPError {error.status_code}"
+    if isinstance(error, googlemaps.exceptions.TransportError):
+        base = error.base_exception
+        return f"TransportError ({type(base).__name__})" if base else "TransportError"
+    return type(error).__name__
+
+
+def log_maps_error(log: logging.Logger, what: str, error: BaseException) -> None:
+    """Log a failed Google Maps request, described by :func:`describe_maps_error`.
+
+    An API error (a revoked or over-quota key, billing turned off) is an
+    ERROR: address search is broken until a coordinator fixes it. A timeout
+    or a network failure is a WARNING the volunteer can retry.
+    """
+    level = (
+        logging.ERROR
+        if isinstance(error, googlemaps.exceptions.ApiError)
+        else logging.WARNING
+    )
+    log.log(level, "%s failed: %s", what, describe_maps_error(error))
 
 
 class ParsedAddress(BaseModel):
@@ -67,14 +106,15 @@ class GoogleAddressLookup:  # pylint: disable=too-few-public-methods
         return self._safe_geocode(address=address_string, region="us")
 
     def _safe_geocode(self, **kwargs) -> Optional[list[dict[str, Any]]]:
-        """Wrap geocoding calls and normalize transport/API failures."""
+        """Geocode, turning a failed request into no result (and a log line).
+
+        Both apps then tell the volunteer the address wasn't found; the log
+        says why, without the key or the address.
+        """
         try:
             return self.gmaps.geocode(**kwargs)
-        except (
-            googlemaps.exceptions.ApiError,
-            googlemaps.exceptions.Timeout,
-            googlemaps.exceptions.TransportError,
-        ):
+        except MAPS_ERRORS as error:
+            log_maps_error(logger, "Google Maps geocoding", error)
             return None
 
 

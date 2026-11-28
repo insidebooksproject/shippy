@@ -16,8 +16,10 @@ from shippy.gui.shipping_coordinators import (
     ShippingStatusPresenter,
 )
 from shippy.gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.autocomplete import GoogleMapsLookupWorker
 
 from ..log_files import read_jsonl
+from ..maps_errors import MAPS_KEY, TYPED, leaks, transport_error
 
 
 @pytest.fixture(name="qapp", scope="module")
@@ -168,15 +170,16 @@ def _lookup(parser):
 
 
 @pytest.mark.parametrize(
-    "error",
+    ("error", "described", "traceback"),
     [
-        googlemaps.exceptions.ApiError("REQUEST_DENIED"),
-        googlemaps.exceptions.Timeout(),
-        KeyError("street_number"),
+        (googlemaps.exceptions.ApiError("REQUEST_DENIED"), "REQUEST_DENIED", False),
+        (googlemaps.exceptions.Timeout(), "Timeout", False),
+        (transport_error(), "TransportError (ConnectionError)", False),
+        (KeyError("street_number"), "unexpectedly", True),
     ],
 )
 def test_failed_address_search_is_logged_as_error(
-    qapp, caplog, error
+    qapp, caplog, error, described, traceback
 ):  # pylint: disable=unused-argument
     coordinator, status_label = _lookup(mock.Mock(side_effect=error))
 
@@ -189,8 +192,12 @@ def test_failed_address_search_is_logged_as_error(
     box.assert_called_once()
     assert status_label.text() == "Address search failed"
     assert [r.levelname for r in caplog.records] == ["ERROR"]
-    assert caplog.records[0].exc_info is not None
-    assert "123 Main" not in caplog.records[0].getMessage()
+    record = caplog.records[0]
+    # A Google Maps error's text holds the request URL: never in the log.
+    assert (record.exc_info is not None) == traceback
+    assert described in record.getMessage()
+    assert not leaks(record.getMessage())
+    assert "123 Main" not in record.getMessage()
 
 
 def test_address_search_that_finds_nothing_is_not_an_error(
@@ -222,3 +229,33 @@ def test_address_search_without_google_maps_is_logged_as_error(
 
     box.assert_called_once()
     assert [r.levelname for r in caplog.records] == ["ERROR"]
+
+
+@pytest.mark.parametrize(
+    ("error", "level"),
+    [
+        (transport_error("/maps/api/place/autocomplete/json"), "WARNING"),
+        (
+            googlemaps.exceptions.ApiError("REQUEST_DENIED", f"bad key {MAPS_KEY}"),
+            "ERROR",
+        ),
+    ],
+)
+def test_failed_address_suggestions_reach_the_error_log_without_key_or_input(
+    qapp, error_log, error, level
+):  # pylint: disable=unused-argument
+    """A Wi-Fi blip or a revoked key while a volunteer types in the search."""
+    gmaps = mock.Mock()
+    gmaps.places_autocomplete.side_effect = error
+    worker = GoogleMapsLookupWorker(gmaps, TYPED, request_id=1)
+    emitted = []
+    worker.error_occurred.connect(lambda *args: emitted.append(args))
+
+    worker.run()  # On this thread: the lookup itself, not the QThread.
+
+    assert len(emitted) == 1 and not leaks(emitted[0][1])
+    text = error_log.read_text("utf-8")
+    assert not leaks(text)
+    records = read_jsonl(error_log)
+    assert [r["level"] for r in records] == [level]
+    assert records[0]["msg"].startswith("Google Maps address suggestions failed: ")

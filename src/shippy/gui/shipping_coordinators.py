@@ -5,7 +5,6 @@
 import logging
 from typing import Any, Callable, Optional
 
-import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
 from PySide6.QtCore import QTimer, Qt  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
     QApplication,
@@ -16,7 +15,12 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 
 from shippy.core import label_journal
-from shippy.core.addresses import AddressParser, AutocompletePrediction
+from shippy.core.addresses import (
+    MAPS_ERRORS,
+    AddressParser,
+    AutocompletePrediction,
+    describe_maps_error,
+)
 from shippy.gui.core.constants import SHIPMENT_SHUTDOWN_WAIT_MS, STATUS_COLORS
 from shippy.gui.core.models import Config
 from shippy.gui.core.rates import RateSummary
@@ -141,12 +145,12 @@ class AddressLookupCoordinator:
                 return
 
             self._status_presenter.set_status("Address loaded successfully", "success")
-        except (
-            googlemaps.exceptions.ApiError,
-            googlemaps.exceptions.Timeout,
-            googlemaps.exceptions.TransportError,
-        ) as error:
-            logger.error("Google Maps address search failed", exc_info=True)
+        except MAPS_ERRORS as error:
+            # Not exc_info: the error's text holds the request URL (the API
+            # key and the address).
+            logger.error(
+                "Google Maps address search failed: %s", describe_maps_error(error)
+            )
             self._status_presenter.set_status("Address search failed", "error")
             QMessageBox.critical(
                 self._parent_widget,

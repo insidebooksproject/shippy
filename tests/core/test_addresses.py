@@ -1,7 +1,11 @@
 """Unit tests for address parsing behavior."""
 
+import logging
 import unittest
 from unittest.mock import Mock
+
+import googlemaps  # type: ignore[import-not-found]
+import pytest
 
 from shippy.core.addresses import (
     AddressComponentParser,
@@ -9,6 +13,8 @@ from shippy.core.addresses import (
     AutocompletePrediction,
     GoogleAddressLookup,
 )
+
+from ..maps_errors import TYPED, leaks, transport_error
 
 
 class AddressParserComponentTests(unittest.TestCase):
@@ -173,6 +179,46 @@ class AddressParserComponentTests(unittest.TestCase):
         )
 
         self.assertIsNone(parsed)
+
+
+@pytest.mark.parametrize(
+    ("error", "level", "described"),
+    [
+        (
+            googlemaps.exceptions.ApiError("REQUEST_DENIED"),
+            "ERROR",
+            "ApiError REQUEST_DENIED",
+        ),
+        (googlemaps.exceptions.Timeout(), "WARNING", "Timeout"),
+        (transport_error(), "WARNING", "TransportError (ConnectionError)"),
+        (googlemaps.exceptions.HTTPError(503), "WARNING", "HTTPError 503"),
+    ],
+)
+def test_failed_geocoding_is_logged_not_taken_for_not_found(
+    caplog, error, level, described
+):
+    """An outage or a bad key is not "not found", though both apps say so."""
+    gmaps = Mock()
+    gmaps.geocode.side_effect = error
+
+    with caplog.at_level(logging.DEBUG, logger="ibp_printing.shippy.core"):
+        assert AddressParser(gmaps)(TYPED) is None
+
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+        (level, f"Google Maps geocoding failed: {described}")
+    ]
+    assert caplog.records[0].exc_info is None
+    assert not leaks(caplog.text)
+
+
+def test_geocoding_that_finds_nothing_logs_nothing(caplog):
+    gmaps = Mock()
+    gmaps.geocode.return_value = []  # googlemaps' ZERO_RESULTS
+
+    with caplog.at_level(logging.WARNING):
+        assert AddressParser(gmaps)(TYPED) is None
+
+    assert not caplog.records
 
 
 if __name__ == "__main__":

@@ -8,7 +8,12 @@ from PySide6.QtCore import QStringListModel, Qt, QThread, QTimer, Signal  # type
 from PySide6.QtWidgets import QCompleter, QLineEdit  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
 from shippy.gui.core.constants import LOOKUP_SHUTDOWN_WAIT_MS
-from shippy.core.addresses import AutocompletePrediction
+from shippy.core.addresses import (
+    MAPS_ERRORS,
+    AutocompletePrediction,
+    describe_maps_error,
+    log_maps_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +58,10 @@ class GoogleMapsLookupWorker(QThread):  # pylint: disable=too-few-public-methods
                 for prediction in places_autocomplete
             ]
             self.results_ready.emit(self.request_id, self.search_text, predictions)
-        except (
-            googlemaps.exceptions.ApiError,
-            googlemaps.exceptions.Timeout,
-            googlemaps.exceptions.TransportError,
-        ) as e:
-            self.error_occurred.emit(self.request_id, str(e))
+        except MAPS_ERRORS as e:
+            # Logged here, stale or not: each is a request that failed.
+            log_maps_error(logger, "Google Maps address suggestions", e)
+            self.error_occurred.emit(self.request_id, describe_maps_error(e))
 
 
 class GoogleMapsCompleter(
@@ -202,12 +205,12 @@ class GoogleMapsCompleter(
             if predictions:
                 self.complete()
 
-    def _on_error(self, request_id: int, error_message: str):
-        """Handle error from worker thread.
+    def _on_error(self, request_id: int, _error_message: str):
+        """Handle error from worker thread (which has logged it).
 
         Args:
             request_id: Request ID that generated this error
-            error_message: Error message
+            _error_message: What failed (describe_maps_error: no key or input)
         """
         # Ignore stale errors from old requests
         if request_id != self.current_request_id:
@@ -216,7 +219,6 @@ class GoogleMapsCompleter(
         # Clear completions on error
         self.current_predictions = []
         self._completion_model.setStringList([])
-        logger.warning("Google Maps API error: %s", error_message)
 
     def get_prediction_for_text(
         self, description: str
