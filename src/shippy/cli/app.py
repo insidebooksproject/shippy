@@ -27,12 +27,13 @@ from ibp_printing.diagnostics import build_report
 from ibp_printing.log import get_logger
 from PIL import Image
 
-from . import console, printer_gate, rates
 from shippy.core import label_journal, postage, purchase
-from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
-from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
-from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
 from shippy.core.ibp_server import Server, ServerError, to_easypost_address
+from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
+from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
+from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
+
+from . import console, printer_gate, rates
 
 # How long to follow a spooled label job before giving up on knowing its outcome.
 PRINT_TRACK_TIMEOUT_S = 30.0
