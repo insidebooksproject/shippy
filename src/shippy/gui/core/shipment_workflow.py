@@ -18,7 +18,7 @@ from shippy.gui.core.constants import (
     OUNCES_PER_POUND,
     PRINT_JOB_NAME,
 )
-from shippy.gui.core.misc import grab_png_from_url
+from shippy.core.misc import grab_png_from_url
 from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
 from shippy.gui.core.rates import RateSummary, summarize_rates
 from shippy.gui.core.services import PurchaseError, ShipmentService

@@ -1,4 +1,4 @@
-"""Miscellaneous utility functions."""
+"""Download a bought label image (both apps)."""
 
 import os
 import tempfile
@@ -11,8 +11,10 @@ from PIL import Image
 @contextlib.contextmanager
 def build_tempfile(*args, **kwargs):
     """Build a tempfile without opening it."""
-    # Create before the try: if creation fails there is no file to remove, and
-    # the finally would raise UnboundLocalError over the real error.
+    # Create before the try: if NamedTemporaryFile itself fails there is no file
+    # to remove, and running the finally anyway raised UnboundLocalError,
+    # replacing the real error (bad dir, permissions, disk full) with a
+    # confusing one.
     tmp = tempfile.NamedTemporaryFile(*args, **kwargs, delete=False)
     try:
         tmp.close()

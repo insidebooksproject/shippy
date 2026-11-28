@@ -30,7 +30,7 @@ from ibp_printing.log import get_logger
 from PIL import Image
 
 from . import console, labels, printer_gate, shipping
-from .misc import build_tempfile, grab_png_from_url
+from shippy.core.misc import build_tempfile, grab_png_from_url
 from .models import Config
 from .server import Server, ServerError, to_easypost_address
 
