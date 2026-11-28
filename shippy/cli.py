@@ -569,7 +569,31 @@ def main():
     if args.config is None:
         parser.error("--config is required for shipping commands")
 
-    ship(args)
+    try:
+        ship(args)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        close_after_unexpected_error(exc)
+
+
+def close_after_unexpected_error(exc: Exception) -> typing.NoReturn:
+    """Last resort: log an error nothing else handled, then close on Enter.
+
+    Without the pause the console window would close before anyone could
+    read what happened. This is also where ibp-printing's
+    ``install_exception_hooks`` and ``configure_error_log`` belong once shippy
+    sets them up.
+    """
+    # Safe to call again; also covers a failure before logging was set up.
+    log_dir = configure_logging(app=LOG_APP_NAME, console=False)
+    logger.critical("unexpected error; closing shippy", exc_info=exc)
+    questionary.print(
+        f"\n  shippy hit a problem it didn't expect. The details are in {log_dir}. "
+        "Press Enter to close.",
+        style="fg:red",
+    )
+    with contextlib.suppress(EOFError, KeyboardInterrupt):
+        input()
+    sys.exit(1)
 
 
 def ship(args: argparse.Namespace) -> None:

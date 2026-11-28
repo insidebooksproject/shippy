@@ -34,8 +34,12 @@ ADDRESS = {
 }
 
 
-class StopShipping(Exception):
-    """Ends the otherwise endless prompt loop."""
+class StopShipping(BaseException):
+    """Ends the otherwise endless prompt loop.
+
+    A BaseException, like KeyboardInterrupt, so that main()'s last-resort
+    handler for unexpected errors lets it through.
+    """
 
 
 def write_config(text: str) -> pathlib.Path:
@@ -246,6 +250,21 @@ class ApiErrorTests(MainLoopCase):
 
         self.assertEqual(exited.exception.code, 130)
         self.client.shipment.create.assert_not_called()
+
+
+class UnexpectedErrorTests(MainLoopCase):
+    """An error nothing else handles is logged, then shippy closes on Enter."""
+
+    def test_unexpected_error_is_logged_and_waits_for_enter(self):
+        self.ship_label.side_effect = RuntimeError("bug")
+        with self.assertLogs("ibp_printing.shippy", "ERROR") as logs:
+            with self.assertRaises(SystemExit) as exited:
+                cli.main()
+
+        self.assertEqual(exited.exception.code, 1)
+        self.assertIsInstance(logs.records[-1].exc_info[1], RuntimeError)
+        self.assertIn("shippy hit a problem it didn't expect", self.printed_text())
+        self.input.assert_called_once()
 
 
 class LoadConfigTests(unittest.TestCase):
