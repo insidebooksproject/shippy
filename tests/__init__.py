@@ -1,1 +1,1 @@
-"""Tests for shippy."""
+"""Tests for shippy and shippy-gui."""

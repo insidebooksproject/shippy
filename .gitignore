@@ -109,5 +109,8 @@ venv.bak/
 # flake8
 .flake8
 
-# config file
+# config file (shippy --config, and shippy-gui's in its working directory)
 config.ini
+
+# shippy-gui's default log file (also covered by *.log)
+shippy.log

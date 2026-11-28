@@ -1,14 +1,11 @@
 """Shared fixtures: canned IBP server responses and an HTTP mock."""
 
 import json
-import sys
 import typing
 from unittest import mock
 
 import pytest
 import requests
-from prompt_toolkit.application import create_app_session
-from prompt_toolkit.output.plain_text import PlainTextOutput
 
 BASE_URL = "http://ibp.test/api"
 
@@ -94,19 +91,7 @@ class FakeHttp:
 
 @pytest.fixture(name="http")
 def fixture_http() -> typing.Iterator[FakeHttp]:
-    """Patch shippy's HTTP GETs with a FakeHttp router."""
+    """Patch the IBP server client's HTTP GETs with a FakeHttp router."""
     fake = FakeHttp()
-    with mock.patch("shippy.server.requests.get", side_effect=fake.get):
+    with mock.patch("shippy.core.ibp_server.requests.get", side_effect=fake.get):
         yield fake
-
-
-@pytest.fixture(autouse=True)
-def fixture_plain_text_output() -> typing.Iterator[None]:
-    """Send questionary's output to stdout as plain text.
-
-    On Windows prompt_toolkit writes through the console API, which fails
-    with NoConsoleScreenBufferError when there is no console (CI, or any
-    redirected stdout). shippy always runs in a console window there.
-    """
-    with create_app_session(output=PlainTextOutput(sys.stdout)):
-        yield

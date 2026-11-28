@@ -1,0 +1,20 @@
+"""Core module for shippy-gui.
+
+This module provides configuration, models, and utility functions.
+"""
+
+from shippy.gui.core.config import (
+    ConfigPaths,
+    load_config,
+    resolve_config_paths,
+    get_font_size_from_path,
+)
+from shippy.gui.core.models import Config
+
+__all__ = [
+    "ConfigPaths",
+    "Config",
+    "load_config",
+    "resolve_config_paths",
+    "get_font_size_from_path",
+]

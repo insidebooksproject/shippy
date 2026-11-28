@@ -1,0 +1,39 @@
+"""Logging configuration utilities."""
+
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+from pathlib import Path
+
+from shippy.core.log import GUI_APP
+from shippy.core.log import configure_logging as configure_printer_logging
+from shippy.gui.core.constants import LOG_BACKUP_COUNT, LOG_MAX_BYTES
+
+
+def configure_logging(log_path: str) -> Path:
+    """Configure application logging to a rotating file.
+
+    Also enables ibp-printing's verbose printer logs (``printer-shippy-gui.log``
+    and ``printer-shippy-gui.jsonl`` in its per-machine log directory). Printer records still
+    propagate to the app log at INFO and above.
+
+    Returns:
+        The directory ibp-printing writes its printer logs to.
+    """
+    log_dir = os.path.dirname(log_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+    handler = RotatingFileHandler(
+        log_path, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT
+    )
+    # ibp-printing logs at DEBUG; keep that detail in its own files only.
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    handler.setFormatter(formatter)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(handler)
+
+    return configure_printer_logging(GUI_APP)

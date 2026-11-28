@@ -1,0 +1,267 @@
+"""Google Maps autocomplete widget for Qt."""
+
+import logging
+from typing import Optional
+
+import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
+from PySide6.QtCore import QStringListModel, Qt, QThread, QTimer, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
+from PySide6.QtWidgets import QCompleter, QLineEdit  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
+
+from shippy.gui.core.constants import LOOKUP_SHUTDOWN_WAIT_MS
+from shippy.core.addresses import AutocompletePrediction
+
+logger = logging.getLogger(__name__)
+
+
+# Lookups still running when their completer goes away (a settings save
+# replaces it) are parked here until they finish, so Qt never destroys a
+# running thread.
+_PARKED_WORKERS: set["GoogleMapsLookupWorker"] = set()
+
+
+def _park(worker: "GoogleMapsLookupWorker") -> None:
+    """Keep a running worker alive past its completer."""
+    _PARKED_WORKERS.add(worker)
+    worker.finished.connect(lambda: _PARKED_WORKERS.discard(worker))
+
+
+class GoogleMapsLookupWorker(QThread):  # pylint: disable=too-few-public-methods
+    """Worker thread for Google Maps API calls."""
+
+    results_ready = Signal(int, str, list)  # (request_id, search text, predictions)
+    error_occurred = Signal(int, str)  # (request_id, error message)
+
+    def __init__(self, gmaps: googlemaps.Client, search_text: str, request_id: int):
+        super().__init__()
+        self.gmaps = gmaps
+        self.search_text = search_text
+        self.request_id = request_id
+
+    def run(self):
+        """Fetch autocomplete predictions from Google Maps."""
+        try:
+            places_autocomplete = self.gmaps.places_autocomplete(
+                input_text=self.search_text, components={"country": "US"}
+            )
+            predictions = [
+                AutocompletePrediction(
+                    description=prediction["description"],
+                    place_id=prediction.get("place_id"),
+                    structured_formatting=prediction.get("structured_formatting"),
+                    types=prediction.get("types", []),
+                )
+                for prediction in places_autocomplete
+            ]
+            self.results_ready.emit(self.request_id, self.search_text, predictions)
+        except (
+            googlemaps.exceptions.ApiError,
+            googlemaps.exceptions.Timeout,
+            googlemaps.exceptions.TransportError,
+        ) as e:
+            self.error_occurred.emit(self.request_id, str(e))
+
+
+class GoogleMapsCompleter(
+    QCompleter
+):  # pylint: disable=too-few-public-methods,too-many-instance-attributes
+    """Google Maps autocomplete completer for QLineEdit."""
+
+    def __init__(
+        self, gmaps: googlemaps.Client, debounce_delay: int = 2000, parent=None
+    ):
+        """Initialize the completer.
+
+        Args:
+            gmaps: Google Maps client
+            debounce_delay: Delay in milliseconds before triggering search
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.gmaps = gmaps
+        self.debounce_delay = debounce_delay
+        self.cache: dict[str, list[AutocompletePrediction]] = {}
+        self.current_predictions: list[AutocompletePrediction] = []
+        self.current_worker = None
+        # Every started worker is held here until it finishes. Dropping the
+        # last reference to a running QThread destroys it mid-run, which Qt
+        # turns into a fatal abort, not a catchable exception.
+        self._active_workers: set[GoogleMapsLookupWorker] = set()
+        self.current_text = ""
+        self.next_request_id = 0
+        self.current_request_id = -1
+
+        # Set up string list model for completions
+        self._completion_model = QStringListModel()
+        self.setModel(self._completion_model)
+        self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
+
+        # Set up debounce timer
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self._fetch_predictions)
+
+    def update_completions(self, text: str):
+        """Update completions based on current text.
+
+        Args:
+            text: Current text in the line edit
+        """
+        # Stop any existing timer
+        self.debounce_timer.stop()
+
+        # Minimum 3 characters required
+        if len(text) < 3:
+            self.current_predictions = []
+            self._completion_model.setStringList([])
+            return
+
+        # Check cache first
+        if text in self.cache:
+            self.current_predictions = self.cache[text]
+            self._completion_model.setStringList(
+                [prediction.description for prediction in self.current_predictions]
+            )
+            # Force the popup to show when using cached results
+            if self.cache[text]:
+                self.complete()
+            return
+
+        # Start debounce timer
+        self.current_text = text
+        self.debounce_timer.start(self.debounce_delay)
+
+    def _fetch_predictions(self):
+        """Fetch predictions from Google Maps API (called after debounce)."""
+        text = self.current_text
+
+        # Assign a new request ID for this search
+        request_id = self.next_request_id
+        self.next_request_id += 1
+        self.current_request_id = request_id
+
+        # Don't terminate the existing worker - terminate() can corrupt state.
+        # It is left to finish and its stale results are ignored, so it must
+        # stay referenced until then; see _active_workers.
+        worker = GoogleMapsLookupWorker(self.gmaps, text, request_id)
+        # A bound slot, not a lambda: Qt drops the connection if this
+        # completer is destroyed first (e.g. replaced after a settings save),
+        # so a late result can't touch deleted widgets.
+        worker.results_ready.connect(self._on_results_ready)
+        worker.error_occurred.connect(self._on_error)
+        worker.finished.connect(self._retire_finished_workers)
+
+        self._active_workers.add(worker)
+        self.current_worker = worker
+        worker.start()
+
+    def _retire_finished_workers(self) -> None:
+        """Release workers that have finished running."""
+        for worker in {w for w in self._active_workers if w.isFinished()}:
+            self._active_workers.discard(worker)
+            worker.deleteLater()
+
+    def wait_for_workers(self, timeout_ms: int = LOOKUP_SHUTDOWN_WAIT_MS) -> None:
+        """Block until in-flight lookups finish, so shutdown does not abort."""
+        for worker in list(self._active_workers):
+            if worker.isRunning():
+                worker.wait(timeout_ms)
+        self._retire_finished_workers()
+        # Any lookup still hung past the wait outlives this completer.
+        for worker in list(self._active_workers):
+            self._active_workers.discard(worker)
+            _park(worker)
+
+    def _on_results_ready(
+        self,
+        request_id: int,
+        text: str,
+        predictions: list[AutocompletePrediction],
+    ):
+        """Handle results from worker thread.
+
+        Args:
+            request_id: Request ID that generated these results
+            text: The search text these predictions are for
+            predictions: List of address predictions
+        """
+        # Ignore stale results from old requests
+        if request_id != self.current_request_id:
+            return
+
+        # Cache the results
+        self.cache[text] = predictions
+
+        # Update model if this is still the current text
+        if text == self.current_text:
+            self.current_predictions = predictions
+            descriptions = [prediction.description for prediction in predictions]
+            self._completion_model.setStringList(descriptions)
+            self._log_duplicate_descriptions(descriptions)
+            # Force the popup to show since the model was updated asynchronously
+            if predictions:
+                self.complete()
+
+    def _on_error(self, request_id: int, error_message: str):
+        """Handle error from worker thread.
+
+        Args:
+            request_id: Request ID that generated this error
+            error_message: Error message
+        """
+        # Ignore stale errors from old requests
+        if request_id != self.current_request_id:
+            return
+
+        # Clear completions on error
+        self.current_predictions = []
+        self._completion_model.setStringList([])
+        logger.warning("Google Maps API error: %s", error_message)
+
+    def get_prediction_for_text(
+        self, description: str
+    ) -> Optional[AutocompletePrediction]:
+        """Return the first stored prediction matching the activated text."""
+        matches = [
+            prediction
+            for prediction in self.current_predictions
+            if prediction.description == description
+        ]
+        if len(matches) > 1:
+            logger.debug("Duplicate autocomplete descriptions for '%s'", description)
+        return matches[0] if matches else None
+
+    @staticmethod
+    def _log_duplicate_descriptions(descriptions: list[str]) -> None:
+        """Log duplicate descriptions to aid future collision handling."""
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for description in descriptions:
+            if description in seen:
+                duplicates.add(description)
+                continue
+            seen.add(description)
+        for description in duplicates:
+            logger.debug("Duplicate autocomplete description returned: %s", description)
+
+
+def setup_google_maps_autocomplete(
+    line_edit: QLineEdit, gmaps: googlemaps.Client, debounce_delay: int = 2000
+) -> GoogleMapsCompleter:
+    """Set up Google Maps autocomplete on a QLineEdit.
+
+    Args:
+        line_edit: The line edit to add autocomplete to
+        gmaps: Google Maps client
+        debounce_delay: Delay in milliseconds before triggering search
+
+    Returns:
+        The completer instance
+    """
+    completer = GoogleMapsCompleter(gmaps, debounce_delay, line_edit)
+    line_edit.setCompleter(completer)
+
+    # Connect text changed signal to update completions
+    line_edit.textChanged.connect(completer.update_completions)
+
+    return completer

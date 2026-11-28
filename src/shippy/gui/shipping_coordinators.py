@@ -1,0 +1,490 @@
+"""UI coordinators used by the shipping tab."""
+
+# pylint: disable=too-few-public-methods
+
+import logging
+from typing import Any, Callable, Optional
+
+import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
+from PySide6.QtCore import QTimer, Qt  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
+from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
+    QApplication,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QWidget,
+)
+
+from shippy.core import label_journal
+from shippy.core.addresses import AddressParser, AutocompletePrediction
+from shippy.gui.core.constants import SHIPMENT_SHUTDOWN_WAIT_MS, STATUS_COLORS
+from shippy.gui.core.models import Config
+from shippy.gui.core.rates import RateSummary
+from shippy.gui.core.services import ShipmentService
+from shippy.gui.core.shipment_workflow import (
+    ShipmentWorkflow,
+    ShipmentWorkflowResult,
+    dialog_uncertain_warning,
+)
+from shippy.gui.printing.printer_manager import (
+    DialogPrintStatus,
+    print_image_with_dialog,
+)
+from shippy.gui.widgets.address_form import AddressForm
+from shippy.gui.widgets.autocomplete import GoogleMapsCompleter
+from shippy.gui.widgets.label_queue import show_label_queued
+from shippy.gui.widgets.printer_gate import PrinterGateResult, wait_for_printer
+from shippy.gui.widgets.shipment_controls import ShipmentControls
+from shippy.gui.workers.shipment_worker import ShipmentWorker
+
+logger = logging.getLogger(__name__)
+
+
+class ShippingStatusPresenter:
+    """Centralized status label formatting for the shipping tab."""
+
+    def __init__(self, status_label: QLabel):
+        self._status_label = status_label
+        self._notice: Optional[str] = None
+
+    def add_notice(self, notice: str) -> None:
+        """Keep ``notice`` on any status set before control returns to Qt.
+
+        For a warning raised in the middle of an action (e.g. the box answer
+        cleared while a looked-up address is filled in) that the action's own
+        final status would otherwise overwrite. It lapses on the next event
+        loop pass, so it never sticks to unrelated later messages.
+        """
+        self._notice = notice
+        QTimer.singleShot(0, self._drop_notice)
+
+    def _drop_notice(self) -> None:
+        self._notice = None
+
+    def set_status(self, message: str, status_type: str = "info") -> None:
+        """Apply a status message and color to the label."""
+        if self._notice:
+            message = f"{message.rstrip('.')}. {self._notice}"
+            if status_type != "error":
+                status_type = "warning"
+        color = STATUS_COLORS.get(status_type, STATUS_COLORS["info"])
+        self._status_label.setText(message)
+        self._status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+
+class AddressLookupCoordinator:
+    """Own address lookup and address form population flow."""
+
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        parent_widget: QWidget,
+        search_input: QLineEdit,
+        address_form: AddressForm,
+        status_presenter: ShippingStatusPresenter,
+        get_address_parser: Callable[[], Optional[AddressParser]],
+        get_address_completer: Callable[[], Optional[GoogleMapsCompleter]],
+    ):
+        self._parent_widget = parent_widget
+        self._search_input = search_input
+        self._address_form = address_form
+        self._status_presenter = status_presenter
+        self._get_address_parser = get_address_parser
+        self._get_address_completer = get_address_completer
+
+    def load_address(self, selected_address: Optional[str] = None) -> None:
+        """Parse selected address and populate address fields."""
+        search_query = selected_address or self._search_input.text().strip()
+        if not search_query:
+            self._status_presenter.set_status(
+                "Please enter an address to search", "error"
+            )
+            return
+
+        address_parser = self._get_address_parser()
+        if address_parser is None:
+            QMessageBox.critical(
+                self._parent_widget, "Error", "Google Maps not configured."
+            )
+            return
+
+        selected_prediction: Optional[AutocompletePrediction] = None
+        completer = self._get_address_completer()
+        if selected_address and completer:
+            selected_prediction = completer.get_prediction_for_text(selected_address)
+
+        self._status_presenter.set_status(f"Parsing address: {search_query}...", "info")
+
+        try:
+            address_parts = address_parser(selected_prediction or search_query)
+            if not address_parts:
+                self._status_presenter.set_status("Could not parse address", "error")
+                QMessageBox.warning(
+                    self._parent_widget,
+                    "Address Parse Error",
+                    f"Could not parse the selected address:\n\n{search_query}\n\n"
+                    "Please try a different address or enter manually.",
+                )
+                return
+
+            self._address_form.merge_address(address_parts)
+            QTimer.singleShot(0, self._search_input.clear)
+
+            missing = AddressForm.missing_required_keys(address_parts)
+            if missing:
+                self._status_presenter.set_status(
+                    f"Address incomplete - missing: {', '.join(missing)}",
+                    "warning",
+                )
+                return
+
+            self._status_presenter.set_status("Address loaded successfully", "success")
+        except (
+            googlemaps.exceptions.ApiError,
+            googlemaps.exceptions.Timeout,
+            googlemaps.exceptions.TransportError,
+        ) as error:
+            self._status_presenter.set_status("Address search failed", "error")
+            QMessageBox.critical(
+                self._parent_widget,
+                "Address Search Error",
+                f"Google Maps API error:\n\n{error}",
+            )
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            self._status_presenter.set_status("Address search failed", "error")
+            QMessageBox.critical(
+                self._parent_widget,
+                "Address Search Error",
+                f"Error parsing address:\n\n{error}",
+            )
+
+
+class ShipmentFlowCoordinator:  # pylint: disable=too-many-instance-attributes
+    """Own label creation, worker wiring, and result presentation."""
+
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        parent_widget: QWidget,
+        address_search_input: QLineEdit,
+        address_form: AddressForm,
+        shipment_controls: ShipmentControls,
+        status_presenter: ShippingStatusPresenter,
+        get_config: Callable[[], Optional[Config]],
+        get_shipment_service: Callable[[], Optional[ShipmentService]],
+        get_logo_path: Callable[[], Optional[str]],
+        worker_factory: Callable[..., ShipmentWorker] = ShipmentWorker,
+        on_shipment_done: Optional[Callable[[], None]] = None,
+        confirm_printer: Callable[
+            [QWidget, ShipmentControls], PrinterGateResult
+        ] = wait_for_printer,
+    ):
+        self._parent_widget = parent_widget
+        self._address_search_input = address_search_input
+        self._address_form = address_form
+        self._shipment_controls = shipment_controls
+        self._status_presenter = status_presenter
+        self._get_config = get_config
+        self._get_shipment_service = get_shipment_service
+        self._get_logo_path = get_logo_path
+        self._worker_factory = worker_factory
+        self._on_shipment_done = on_shipment_done or (lambda: None)
+        self._confirm_printer = confirm_printer
+        self.worker: Optional[ShipmentWorker] = None
+        # True while a Shift+Click label is in the print dialog or being
+        # refunded/saved; the dialog's event loop can clear self.worker first.
+        self._handling_label = False
+        # Quoted rates vs the one bought, kept for the Shift+Click print
+        # dialog path, where the worker may finish before the label prints.
+        self._rate_summary: Optional[RateSummary] = None
+        # The summary shown by the last success, re-shown by follow-up warnings.
+        self._shown_rate_summary: Optional[RateSummary] = None
+        # Any change of recipient means another package: forget the box answer.
+        self._address_form.recipient_changed.connect(self._on_recipient_changed)
+
+    BOX_ANSWER_CLEARED_TEXT = (
+        "Box size answer cleared because the address changed - tick it again "
+        "if the box still qualifies"
+    )
+    # Appended to the status an address lookup sets right after clearing it.
+    BOX_ANSWER_CLEARED_NOTICE = (
+        "Box size answer cleared - tick it again if the box still qualifies"
+    )
+
+    def _on_recipient_changed(self) -> None:
+        """Forget the box answer for a different recipient, saying so if it was ticked."""
+        if self._shipment_controls.clear_small_box() is True:
+            self._status_presenter.set_status(self.BOX_ANSWER_CLEARED_TEXT, "warning")
+            self._status_presenter.add_notice(self.BOX_ANSWER_CLEARED_NOTICE)
+
+    def create_label(self) -> None:
+        """Create and print a shipping label."""
+        self._rate_summary = None
+        self._shown_rate_summary = None
+        validation_error = (
+            self._address_form.validate_required() or self._shipment_controls.validate()
+        )
+        if validation_error:
+            self._shipment_controls.clear_small_box()
+            self._status_presenter.set_status(validation_error, "error")
+            return
+
+        shipment_service = self._get_shipment_service()
+        config = self._get_config()
+        if shipment_service is None or config is None:
+            self._shipment_controls.clear_small_box()
+            QMessageBox.critical(
+                self._parent_widget, "Error", "Services not configured."
+            )
+            return
+
+        # Read Shift before the printer check can change the modifier state.
+        use_dialog = (
+            QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier
+        ) == Qt.KeyboardModifier.ShiftModifier
+
+        to_address = self._address_form.get_address()
+        # Shift+Click picks the printer in the system dialog, so no USB check.
+        if not use_dialog and not self._confirm_printer_ready():
+            return
+
+        self._shipment_controls.set_enabled(False)
+
+        self.worker = self._worker_factory(
+            shipment_service=shipment_service,
+            ibp_url=str(config.ibp.url),
+            to_address=to_address,
+            weight_lbs=self._shipment_controls.weight_lbs,
+            printer_name=self._shipment_controls.printer_name,
+            logo_path=self._get_logo_path(),
+            use_dialog=use_dialog,
+            small_box=self._shipment_controls.small_box,
+        )
+
+        self.worker.progress.connect(
+            lambda message: self._status_presenter.set_status(message, "info")
+        )
+        self.worker.warning.connect(
+            lambda message: self._status_presenter.set_status(message, "warning")
+        )
+        self.worker.success.connect(self._on_shipment_success)
+        self.worker.success_with_warning.connect(self._on_shipment_success_with_warning)
+        self.worker.label_saved.connect(self._on_label_saved)
+        self.worker.error.connect(self._on_shipment_error)
+        self.worker.finished.connect(self._on_shipment_finished)
+        self.worker.label_ready.connect(self._on_label_ready)
+        self.worker.start()
+
+    def _confirm_printer_ready(self) -> bool:
+        """Stop before buying postage when no label printer is plugged in.
+
+        Returns True to go ahead: a printer was found (now or while waiting),
+        or the volunteer chose to continue anyway, in which case the selected
+        printer is empty and the label is saved for the label watcher.
+        """
+        choice = self._confirm_printer(self._parent_widget, self._shipment_controls)
+        if choice is PrinterGateResult.CANCELED:
+            logger.info("No label printer detected: volunteer canceled")
+            self._shipment_controls.clear_small_box()
+            self._status_presenter.set_status(
+                "Label NOT created: no label printer detected", "warning"
+            )
+            return False
+        if choice is PrinterGateResult.CONTINUE_ANYWAY:
+            logger.warning(
+                "No label printer detected: volunteer chose to continue anyway "
+                "(the label will be saved to print later)"
+            )
+        return True
+
+    def _on_label_ready(
+        self,
+        image,
+        printer_name: str,
+        shipment: Any,
+        prepared: Optional[ShipmentWorkflowResult] = None,
+    ) -> None:
+        """Handle label ready for printing via system dialog.
+
+        Canceled: refund (nothing was printed and the volunteer chose not to).
+        Not sent (printing could not start): save for the label watcher like
+        a PrintError, refunding only if saving fails. Failed after printing
+        started: warn, no refund, nothing saved.
+        """
+        self._handling_label = True
+        try:
+            self._handle_dialog_label(image, printer_name, shipment, prepared)
+        finally:
+            self._handling_label = False
+        # The worker may have finished while the print dialog was open.
+        self._on_shipment_done()
+
+    def _handle_dialog_label(
+        self,
+        image,
+        printer_name: str,
+        shipment: Any,
+        prepared: Optional[ShipmentWorkflowResult],
+    ) -> None:
+        """Print through the dialog, then refund, save or report the outcome."""
+        if prepared is not None:
+            self._rate_summary = prepared.rate_summary
+        result = print_image_with_dialog(
+            image, self._parent_widget, preferred_printer_name=printer_name
+        )
+        if result == DialogPrintStatus.PRINTED:
+            label_journal.update_status(shipment, label_journal.STATUS_PRINTED)
+            self._on_shipment_success(
+                f"Label printed! Tracking: {shipment.tracking_code}"
+            )
+        elif result == DialogPrintStatus.CANCELED:
+            self._refund_shipment(shipment, "Print canceled")
+        elif result == DialogPrintStatus.NOT_SENT:
+            self._save_dialog_label(image, printer_name, shipment, prepared)
+        else:
+            label_journal.update_status(shipment, label_journal.STATUS_CHECK_PRINTER)
+            self._on_shipment_success_with_warning(
+                f"{dialog_uncertain_warning()} Tracking: {shipment.tracking_code}"
+            )
+
+    def _save_dialog_label(
+        self,
+        image,
+        printer_name: str,
+        shipment: Any,
+        prepared: Optional[ShipmentWorkflowResult] = None,
+    ) -> None:
+        """Queue a dialog-printed label that never started printing."""
+        shipment_service = self._get_shipment_service()
+        if shipment_service is None:
+            self._on_shipment_error(
+                "The label did not print and could not be saved: services "
+                f"not configured. Tracking: {shipment.tracking_code}"
+            )
+            return
+        result = ShipmentWorkflow(shipment_service).save_unprinted_label(
+            shipment,
+            image,
+            RuntimeError(
+                f"printing could not start on {printer_name or 'the printer'}"
+            ),
+            on_progress=lambda message: self._status_presenter.set_status(
+                message, "info"
+            ),
+            identity=prepared.identity if prepared else None,
+            label_record=prepared.label_record if prepared else None,
+        )
+        if result.saved_label_path is not None:
+            self._on_label_saved(result)
+        else:
+            self._on_shipment_error(result.message)
+
+    def _refund_shipment(self, shipment, reason: str) -> None:
+        """Request a refund for a shipment."""
+        # No label was made: forget this box's answer and quoted rates.
+        self._rate_summary = None
+        self._shipment_controls.clear_small_box()
+        shipment_service = self._get_shipment_service()
+        if shipment_service is None:
+            return
+
+        self._status_presenter.set_status("Requesting refund...", "warning")
+        try:
+            shipment_service.refund_shipment(shipment.id)
+            label_journal.update_status(shipment, label_journal.STATUS_REFUNDED)
+            self._status_presenter.set_status(f"{reason}. Refunded.", "warning")
+        except Exception:  # pylint: disable=broad-exception-caught
+            # Nothing for the volunteer to do: the weekly refund job refunds
+            # the unused label, so no dialog, just the status line.
+            logger.error("Refund of %s failed", shipment.id, exc_info=True)
+            self._status_presenter.set_status(
+                f"{reason}. The unused label is refunded automatically.", "warning"
+            )
+
+    def _with_rates(self, message: str) -> str:
+        """Append the quoted-rate comparison of the last label, if any."""
+        if self._shown_rate_summary is None:
+            return message
+        return f"{message}\n{self._shown_rate_summary.text}"
+
+    def _on_shipment_success(self, message: str) -> None:
+        """Handle successful shipment."""
+        summary = getattr(self.worker, "rate_summary", None) or self._rate_summary
+        self._rate_summary = None
+        self._shown_rate_summary = summary if isinstance(summary, RateSummary) else None
+        status_type = "success"
+        if self._shown_rate_summary and self._shown_rate_summary.library_mail_missing:
+            status_type = "warning"
+        self._status_presenter.set_status(self._with_rates(message), status_type)
+        # Reset the controls (unticking the box) before clearing the form, so
+        # the form's recipient_changed does not report a cleared box answer.
+        self._shipment_controls.reset()
+        self._address_form.clear()
+        self._address_search_input.setFocus()
+
+    def _on_shipment_success_with_warning(self, message: str) -> None:
+        """Handle a label that was spooled but may not have printed."""
+        self._on_shipment_success(message)
+        self._status_presenter.set_status(self._with_rates(message), "warning")
+        QMessageBox.warning(self._parent_widget, "Check The Printer", message)
+
+    def _on_label_saved(self, result: ShipmentWorkflowResult) -> None:
+        """Handle a label that did not print and was saved for printing later."""
+        # Postage is kept, so clear the form like a success: re-submitting it
+        # would buy a second label.
+        self._on_shipment_success(result.message)
+        recipient = (
+            result.identity.recipient_label if result.identity else "this recipient"
+        )
+        tracking = (
+            label_journal.tracking_ref(result.shipment) if result.shipment else "?"
+        )
+        self._status_presenter.set_status(
+            self._with_rates(
+                f"Label saved for {recipient} (tracking {tracking}); it will "
+                "print automatically when the printer is working."
+            ),
+            "warning",
+        )
+        show_label_queued(self._parent_widget, recipient, tracking)
+
+    def _on_shipment_error(self, message: str) -> None:
+        """Handle shipment error."""
+        # No label: forget the quoted rates and, to be safe, the box answer.
+        self._rate_summary = None
+        self._shipment_controls.clear_small_box()
+        self._status_presenter.set_status("Shipment failed", "error")
+        QMessageBox.critical(self._parent_widget, "Shipment Error", message)
+
+    def _on_shipment_finished(self) -> None:
+        """Handle worker thread completion."""
+        self._shipment_controls.set_enabled(True)
+        if self.worker is not None:
+            # Hand the finished thread to Qt rather than dropping it outright.
+            self.worker.deleteLater()
+        self.worker = None
+        self._on_shipment_done()
+
+    def is_busy(self) -> bool:
+        """Whether a shipment is being bought, printed or refunded right now.
+
+        Busy until the worker's ``finished`` slot clears it, not just while the
+        thread runs: on Shift+Click the thread exits after emitting
+        ``label_ready``, and the print dialog (or refund) still has to run.
+        The dialog's nested event loop can run ``finished`` before it closes,
+        so ``_handling_label`` covers the rest.
+        """
+        return self.worker is not None or self._handling_label
+
+    def wait_for_worker(self, timeout_ms: int = SHIPMENT_SHUTDOWN_WAIT_MS) -> bool:
+        """Block until any in-flight shipment finishes.
+
+        Called on shutdown. A worker destroyed mid-run aborts the process,
+        which could strand postage between purchase and printing or refund.
+
+        Returns:
+            True if no worker is still running afterwards.
+        """
+        worker = self.worker
+        if worker is None or not worker.isRunning():
+            return True
+        worker.wait(timeout_ms)
+        return not worker.isRunning()

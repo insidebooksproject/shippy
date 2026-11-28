@@ -1,0 +1,152 @@
+"""Unit tests for the ShipmentService EasyPost wrapper."""
+
+import unittest
+from unittest.mock import patch
+
+import easypost
+
+from shippy.core.postage import PREDEFINED_PACKAGE as PARCEL_PREDEFINED_PACKAGE
+from shippy.gui.core.models import ParcelConfig
+from shippy.gui.core.services import (
+    PurchaseError,
+    ShipmentService,
+)
+
+errors = easypost.errors
+
+
+class ShipmentServiceTests(unittest.TestCase):
+    """Tests for shipment creation via EasyPost."""
+
+    def setUp(self):
+        patcher = patch("shippy.gui.core.services.easypost.EasyPostClient")
+        self.addCleanup(patcher.stop)
+        self.client_class = patcher.start()
+        self.client = self.client_class.return_value
+
+    def test_buy_shipment_declares_parcel_dimensions(self):
+        parcel_config = ParcelConfig(length=22.0, width=16.0, height=12.0)
+        service = ShipmentService("ep_test", parcel_config)
+
+        service.buy_shipment("from_id", "to_id", 48.0)
+
+        self.client.parcel.create.assert_called_once_with(
+            predefined_package=PARCEL_PREDEFINED_PACKAGE,
+            weight=48.0,
+            length=22.0,
+            width=16.0,
+            height=12.0,
+        )
+
+    def test_buy_shipment_declares_large_dimensions_by_default(self):
+        service = ShipmentService("ep_test", ParcelConfig())
+
+        service.buy_shipment("from_id", "to_id", 96.0)
+
+        kwargs = self.client.parcel.create.call_args.kwargs
+        self.assertEqual(
+            (kwargs["length"], kwargs["width"], kwargs["height"]), (20.0, 14.0, 10.0)
+        )
+
+    def test_buy_shipment_declares_twelve_inch_cube_for_small_box(self):
+        parcel_config = ParcelConfig(length=22.0, width=16.0, height=12.0)
+        service = ShipmentService("ep_test", parcel_config)
+
+        service.buy_shipment("from_id", "to_id", 96.0, small_box=True)
+
+        self.client.parcel.create.assert_called_once_with(
+            predefined_package=PARCEL_PREDEFINED_PACKAGE,
+            weight=96.0,
+            length=12.0,
+            width=12.0,
+            height=12.0,
+        )
+
+    def test_small_box_still_buys_lowest_usps_rate(self):
+        service = ShipmentService("ep_test", ParcelConfig())
+
+        result = service.buy_shipment("from_id", "to_id", 96.0, small_box=True)
+
+        shipment = self.client.shipment.create.return_value
+        shipment.lowest_rate.assert_called_once_with(["USPS"])
+        self.client.shipment.buy.assert_called_once_with(
+            shipment.id, rate=shipment.lowest_rate.return_value
+        )
+        self.assertIs(result, self.client.shipment.buy.return_value)
+
+    def test_buy_shipment_buys_lowest_rate_for_created_shipment(self):
+        service = ShipmentService("ep_test", ParcelConfig())
+
+        result = service.buy_shipment("from_id", "to_id", 48.0)
+
+        shipment = self.client.shipment.create.return_value
+        self.client.shipment.buy.assert_called_once_with(
+            shipment.id, rate=shipment.lowest_rate.return_value
+        )
+        self.assertIs(result, self.client.shipment.buy.return_value)
+
+    def test_buy_shipment_tags_the_shipment_as_manual(self):
+        service = ShipmentService("ep_test", ParcelConfig())
+
+        service.buy_shipment("from_id", "to_id", 48.0, small_box=True)
+
+        self.client.shipment.create.assert_called_once_with(
+            from_address={"id": "from_id"},
+            to_address={"id": "to_id"},
+            parcel=self.client.parcel.create.return_value,
+            options={"special_rates_eligibility": "USPS.LIBRARYMAIL"},
+            reference="ibp1:manual",
+        )
+
+    def test_failed_buy_request_raises_purchase_error(self):
+        # The charge may have gone through even though the response was lost.
+        self.client.shipment.buy.side_effect = easypost.errors.HttpError("reset")
+        service = ShipmentService("ep_test", ParcelConfig())
+
+        with self.assertRaises(PurchaseError) as caught:
+            service.buy_shipment("from_id", "to_id", 48.0)
+
+        self.assertIsInstance(caught.exception.__cause__, easypost.errors.HttpError)
+
+    def test_buy_turned_down_by_easypost_is_not_a_purchase_error(self):
+        for error in (
+            errors.PaymentError("insufficient funds", http_status=402),
+            errors.InvalidRequestError("rate expired", http_status=422),
+        ):
+            with self.subTest(error=type(error).__name__):
+                self.client.shipment.buy.side_effect = error
+                service = ShipmentService("ep_test", ParcelConfig())
+
+                with self.assertRaises(type(error)) as caught:
+                    service.buy_shipment("from_id", "to_id", 48.0)
+
+                self.assertIs(caught.exception, error)
+
+    def test_failure_before_the_buy_request_is_not_a_purchase_error(self):
+        self.client.shipment.create.side_effect = easypost.errors.HttpError("reset")
+        service = ShipmentService("ep_test", ParcelConfig())
+
+        with self.assertRaises(easypost.errors.HttpError):
+            service.buy_shipment("from_id", "to_id", 48.0)
+
+        self.client.shipment.buy.assert_not_called()
+
+
+class ConfiguredSmallBoxTests(unittest.TestCase):
+    """The small box comes from [parcel], checked when the config is read."""
+
+    @patch("shippy.gui.core.services.easypost.EasyPostClient")
+    def test_configured_small_box_is_declared(self, client_class):
+        parcel_config = ParcelConfig(small_length=18, small_width=12, small_height=8)
+        service = ShipmentService("ep_test", parcel_config)
+
+        service.buy_shipment("from_id", "to_id", 96.0, small_box=True)
+
+        kwargs = client_class.return_value.parcel.create.call_args.kwargs
+        self.assertEqual(
+            (kwargs["length"], kwargs["width"], kwargs["height"]), (18.0, 12.0, 8.0)
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
