@@ -12,8 +12,8 @@ from shippy.gui.core.ibp_server import (
 )
 from shippy.gui.core.models import RecipientAddress
 from shippy.gui.core.services import ShipmentService
+from shippy.core.purchase import CHECK_PRINTER_ADVICE
 from shippy.gui.core.shipment_workflow import (
-    CHECK_PRINTER_ADVICE,
     PURCHASE_UNCERTAIN_MESSAGE,
     ShipmentWorkflowInput,
     ShipmentWorkflow,

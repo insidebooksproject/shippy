@@ -18,6 +18,13 @@ from shippy.gui.core.constants import (
 )
 from shippy.core.misc import add_logo, grab_png_from_url
 from shippy.core.postage import OUNCES_PER_POUND
+from shippy.core.purchase import (
+    CHECK_PRINTER_ADVICE,
+    BuyFailure,
+    buy_failure_advice,
+    classify_buy_failure,
+    print_outcome_detail,
+)
 from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
 from shippy.gui.core.rates import RateSummary, summarize_rates
 from shippy.gui.core.services import PurchaseError, ShipmentService
@@ -28,20 +35,18 @@ logger = logging.getLogger(__name__)
 # PrintError text when the volunteer continued without a label printer.
 NO_PRINTER_ERROR = "no label printer was plugged in when the label was created"
 
+
 # What the volunteer is told when creating a label fails; the technical
 # details go to the log. Unused labels are refunded automatically, so trying
 # again is always safe.
-NOT_BOUGHT_MESSAGE = (
-    "The label could not be created. No postage was bought. Try this shipment again."
-)
-PAYMENT_FAILED_MESSAGE = (
-    "The label could not be created. The EasyPost account can't pay for "
-    "postage right now. Tell a coordinator; no postage was bought."
-)
-PURCHASE_UNCERTAIN_MESSAGE = (
-    "The label could not be created. The purchase may not have completed. Try "
-    "this shipment again; an unused label is refunded automatically."
-)
+def _buy_failure_message(failure: BuyFailure) -> str:
+    advice = buy_failure_advice(failure, item="shipment")
+    return f"The label could not be created. {advice}"
+
+
+NOT_BOUGHT_MESSAGE = _buy_failure_message(BuyFailure.NOT_BOUGHT)
+PAYMENT_FAILED_MESSAGE = _buy_failure_message(BuyFailure.CANT_PAY)
+PURCHASE_UNCERTAIN_MESSAGE = _buy_failure_message(BuyFailure.MAYBE_BOUGHT)
 LABEL_NOT_PREPARED_MESSAGE = "The label could not be prepared after postage was bought"
 
 ProgressCallback = Callable[[str], None]
@@ -179,13 +184,10 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
             if shipment is None:
                 # Failed before the buy, or EasyPost turned the buy down (4xx).
                 logger.error("Shipment creation failed; nothing bought", exc_info=True)
+                failure = classify_buy_failure(error, during_buy=False)
                 return ShipmentWorkflowResult(
                     status=ShipmentWorkflowStatus.ERROR,
-                    message=(
-                        PAYMENT_FAILED_MESSAGE
-                        if _is_payment_error(error)
-                        else NOT_BOUGHT_MESSAGE
-                    ),
+                    message=_buy_failure_message(failure),
                 )
             # Postage was bought but there is no label image to print or save.
             logger.error("Label preparation failed after purchase", exc_info=True)
@@ -380,28 +382,12 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
             )
 
 
-def _is_payment_error(error: Exception) -> bool:
-    """Whether EasyPost refused the buy because the account can't pay (402)."""
-    return (
-        isinstance(error, easypost.errors.PaymentError)
-        or getattr(error, "http_status", None) == 402
-    )
-
-
 def saved_label_message(print_error: Exception, path: Path) -> str:
     """Tell the volunteer an unprinted label was saved to print later."""
     return (
         f"The label didn't print ({print_error}). It was saved to {path} and "
         "will print automatically when the printer is working."
     )
-
-
-# What to do about a label that may not have printed. Unused labels are
-# refunded automatically, so a second label is the cheap, safe answer.
-CHECK_PRINTER_ADVICE = (
-    "Check the printer. If no label came out, create it again; the unused one "
-    "is refunded automatically."
-)
 
 
 def print_raised_warning(printer_name: str, error: Exception) -> str:
@@ -422,19 +408,12 @@ def dialog_uncertain_warning() -> str:
     )
 
 
-# Outcomes whose raw value reads badly in a sentence about "the print queue".
-_OUTCOME_DETAILS = {
-    "uncertain": "it could not be confirmed that the job reached the printer",
-    "tracking_failed": "following the print job failed",
-}
-
-
 def _print_outcome_warning(
     printer_name: str, print_result: ibp_printing.PrintResult
 ) -> str:
     """Explain a spooled job whose tracked outcome suggests no label came out."""
     outcome = print_result.outcome.value
-    detail = _OUTCOME_DETAILS.get(outcome, f"the print queue reported '{outcome}'")
+    detail = print_outcome_detail(outcome)
     return (
         f"Label was sent to {printer_name} but {detail}, so it may not have "
         f"printed. {CHECK_PRINTER_ADVICE} "

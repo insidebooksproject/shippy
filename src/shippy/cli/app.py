@@ -28,7 +28,7 @@ from ibp_printing.log import get_logger
 from PIL import Image
 
 from . import console, printer_gate, rates
-from shippy.core import label_journal, postage
+from shippy.core import label_journal, postage, purchase
 from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
 from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
@@ -45,36 +45,26 @@ TYPED_ADDRESS_MODES = frozenset({"manual"})
 # Volunteer-facing style for warnings and notices.
 WARNING_STYLE = "fg:yellow"
 
-# What to do when a label may not have printed. Unused labels are refunded
-# automatically (a weekly job on the IBP server), so a second label is cheap.
-CREATE_AGAIN_ADVICE = (
-    "Check the printer. If no label came out, create it again; the unused one "
-    "is refunded automatically."
-)
+# What to do when a label may not have printed.
+CREATE_AGAIN_ADVICE = purchase.CHECK_PRINTER_ADVICE
 
 # What to do after EasyPost or the IBP server failed for one package. A buy
 # whose answer was lost may still have bought a label; that is left to the
 # weekly refund job, with no check or extra prompt here (decided 2026-11-17).
-NOT_BOUGHT_ADVICE = "No postage was bought. Try this package again."
-MAYBE_BOUGHT_ADVICE = (
-    "The purchase may not have completed. Try this package again; an unused "
-    "label is refunded automatically."
+NOT_BOUGHT_ADVICE = purchase.buy_failure_advice(
+    purchase.BuyFailure.NOT_BOUGHT, item="package"
 )
-CANT_PAY_ADVICE = (
-    "The EasyPost account can't pay for postage right now. Tell a coordinator; "
-    "no postage was bought."
+MAYBE_BOUGHT_ADVICE = purchase.buy_failure_advice(
+    purchase.BuyFailure.MAYBE_BOUGHT, item="package"
+)
+CANT_PAY_ADVICE = purchase.buy_failure_advice(
+    purchase.BuyFailure.CANT_PAY, item="package"
 )
 
 # Failures reaching the IBP server: a 4xx it reported, or no usable answer.
 SERVER_ERRORS = (ServerError, requests.RequestException)
 
 T = typing.TypeVar("T")
-
-# Outcomes whose raw value reads badly after "the printer queue reported".
-OUTCOME_DETAILS = {
-    "uncertain": "it could not be confirmed that the job reached the printer",
-    "tracking_failed": "following the print job failed",
-}
 
 
 def build_unit_choices(units: list[dict]) -> dict[str, tuple[str, str]]:
@@ -353,7 +343,7 @@ def warn_if_job_not_ok(shipment, result: PrintResult, log_dir: pathlib.Path) -> 
     if result.outcome.ok:
         return
     outcome = result.outcome.value
-    detail = OUTCOME_DETAILS.get(outcome, f"the printer queue reported '{outcome}'")
+    detail = purchase.print_outcome_detail(outcome)
     logger.warning(
         "label %s sent to %r but its outcome is %s; it may not have printed",
         label_journal.tracking_ref(shipment),
@@ -693,7 +683,7 @@ def fetch_until_ok(
 def startup_failure(exc: Exception, what: str) -> str:
     """What went wrong fetching ``what``, and what to do before trying again."""
     on_easypost = isinstance(exc, easypost.errors.EasyPostError)
-    if not is_refusal(exc):
+    if not purchase.is_refusal(exc):
         service = "EasyPost" if on_easypost else "the IBP server"
         return f"Can't reach {service}. Check the internet connection, then"
 
@@ -721,29 +711,26 @@ class PurchaseFailed(Exception):
         self.error = error
 
 
-def is_refusal(exc: Exception) -> bool:
-    """Whether EasyPost or the IBP server definitely turned the request down.
-
-    A 4xx answer (other than a timeout) is a refusal, e.g. EasyPost's for an
-    empty wallet: trying again won't help, and a refused buy bought nothing.
-    No answer, a timeout or a 5xx may be temporary, and a buy that failed that
-    way may have gone through.
-    """
-    status = getattr(exc, "http_status", None) or getattr(exc, "status_code", None)
-    return isinstance(status, int) and 400 <= status < 500 and status != 408
-
-
 def report_shipping_error(
     exc: easypost.errors.EasyPostError,
     reference: typing.Optional[str],
     *,
-    maybe_bought: bool,
+    during_buy: bool,
 ) -> None:
-    """Tell the volunteer EasyPost failed for this package, and log it."""
+    """Tell the volunteer EasyPost failed for this package, and log it.
+
+    ``during_buy`` says the buy request itself failed (so it may have gone
+    through), rather than a step before it.
+    """
+    failure = purchase.classify_buy_failure(exc, during_buy=during_buy)
     logger.error(
         "EasyPost failed for %s (%s)",
         reference,
-        "purchase may have completed" if maybe_bought else "nothing bought",
+        (
+            "purchase may have completed"
+            if failure is purchase.BuyFailure.MAYBE_BOUGHT
+            else "nothing bought"
+        ),
         exc_info=exc,
     )
     if isinstance(exc, easypost.errors.FilteringError):
@@ -752,12 +739,7 @@ def report_shipping_error(
         )
     else:
         problem = f"EasyPost reported a problem: {exc.message}"
-    if isinstance(exc, easypost.errors.PaymentError):
-        advice = CANT_PAY_ADVICE
-    elif maybe_bought:
-        advice = MAYBE_BOUGHT_ADVICE
-    else:
-        advice = NOT_BOUGHT_ADVICE
+    advice = purchase.buy_failure_advice(failure, item="package")
     questionary.print(f"  {problem}\n  {advice}", style="fg:red")
 
 
@@ -798,14 +780,10 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
             reference=reference,
         )
     except PurchaseFailed as failed:
-        report_shipping_error(
-            failed.error,
-            reference,
-            maybe_bought=not is_refusal(failed.error),
-        )
+        report_shipping_error(failed.error, reference, during_buy=True)
         return
     except easypost.errors.EasyPostError as exc:
-        report_shipping_error(exc, reference, maybe_bought=False)
+        report_shipping_error(exc, reference, during_buy=False)
         return
 
     record = label_journal.record_purchase(identity, shipment, app=CLI_APP)

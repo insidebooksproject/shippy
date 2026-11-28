@@ -4,6 +4,7 @@ from typing import Any
 
 import easypost  # type: ignore[import-not-found] # pylint: disable=import-error
 
+from shippy.core.purchase import purchase_may_have_completed
 from shippy.core.postage import MANUAL_REFERENCE, cheapest_rate, quote_shipment
 from shippy.gui.core.models import AddressBase, ParcelConfig
 
@@ -14,18 +15,6 @@ class PurchaseError(Exception):
     The charge can go through even when the response is lost; the weekly
     refund job refunds any label that was bought but never used.
     """
-
-
-def purchase_may_have_completed(error: Exception) -> bool:
-    """Whether a buy request that raised ``error`` may still have bought postage.
-
-    A 4xx answer (other than 408, a timeout) means EasyPost turned the
-    purchase down, e.g. for an empty wallet. No answer, a timeout, a 5xx or
-    any other exception may have come after the charge went through.
-    """
-    status = getattr(error, "http_status", None)
-    refused = isinstance(status, int) and 400 <= status < 500 and status != 408
-    return not refused
 
 
 class ShipmentService:
