@@ -15,6 +15,7 @@ import typing
 import easypost  # type: ignore
 import googlemaps  # type: ignore
 import questionary
+import requests
 from ibp_printing import (
     PrintError,
     PrintResult,
@@ -56,6 +57,20 @@ CREATE_AGAIN_ADVICE = (
     "is refunded automatically."
 )
 
+# What to do after EasyPost or the IBP server failed for one package. A buy
+# whose answer was lost may still have bought a label; that is left to the
+# weekly refund job, with no check or extra prompt here (decided 2026-11-17).
+NOT_BOUGHT_ADVICE = "No postage was bought. Try this package again."
+MAYBE_BOUGHT_ADVICE = (
+    "The purchase may not have completed. Try this package again; an unused "
+    "label is refunded automatically."
+)
+
+# Failures reaching the IBP server: a 4xx it reported, or no usable answer.
+SERVER_ERRORS = (ServerError, requests.RequestException)
+
+T = typing.TypeVar("T")
+
 # Outcomes whose raw value reads badly after "the printer queue reported".
 OUTCOME_DETAILS = {
     "uncertain": "it could not be confirmed that the job reached the printer",
@@ -86,11 +101,13 @@ def generate_addresses_bulk(config: Config):
     """Generate addresses for bulk shipping."""
     server = Server.from_config(config.ibp)
 
-    with console.task_message("Grabbing shipping settings from IBP server"):
-        recipient_name = server.shipping_settings()["unit_recipient_name"]
-
-    with console.task_message("Grabbing units list from IBP server"):
-        units = build_unit_choices(server.units())
+    recipient_name = fetch_until_ok(
+        "Grabbing shipping settings from IBP server",
+        lambda: server.shipping_settings()["unit_recipient_name"],
+    )
+    units = build_unit_choices(
+        fetch_until_ok("Grabbing units list from IBP server", server.units)
+    )
 
     while True:
         unit = console.query_unit(units)
@@ -104,6 +121,9 @@ def generate_addresses_bulk(config: Config):
                 unit_data = server.unit(jurisdiction, name)
         except ServerError as exc:
             questionary.print(f"  {exc.detail}", style="fg:red")
+            continue
+        except requests.RequestException as exc:
+            report_server_unreachable(exc)
             continue
 
         to_addr = to_easypost_address(recipient_name, unit_data)
@@ -265,6 +285,9 @@ def generate_addresses_individual(config: Config):
                 address = fetch_request_address(server, request_id)
         except ServerError as exc:
             questionary.print(f"  {exc.detail}", style="fg:red")
+            continue
+        except requests.RequestException as exc:
+            report_server_unreachable(exc)
             continue
 
         if not check_request_address(address):
@@ -532,7 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main():  # pylint: disable=too-many-locals
+def main():
     """Ship to an inmate or a unit."""
 
     parser = build_parser()
@@ -546,6 +569,11 @@ def main():  # pylint: disable=too-many-locals
     if args.config is None:
         parser.error("--config is required for shipping commands")
 
+    ship(args)
+
+
+def ship(args: argparse.Namespace) -> None:
+    """Run a shipping session until the volunteer closes shippy."""
     config = load_config(args.config)
     log_dir = configure_logging(app=LOG_APP_NAME, console=False)
 
@@ -568,9 +596,11 @@ def main():  # pylint: disable=too-many-locals
             # ibp-kiosk launcher) can tell it from a failure.
             sys.exit(130)
 
-    with console.task_message("Grabbing return address from IBP server"):
-        return_address = Server.from_config(config.ibp).return_address()
-        from_addr = shipping.build_address(easypost_client, **return_address)
+    server = Server.from_config(config.ibp)
+    from_addr = fetch_until_ok(
+        "Grabbing return address from IBP server",
+        lambda: shipping.build_address(easypost_client, **server.return_address()),
+    )
 
     try:
         with console.task_message("Verifying return address"):
@@ -583,38 +613,157 @@ def main():  # pylint: disable=too-many-locals
 
     report_pending_labels()
 
-    for to_addr_dict, weight, small_box, reference in args.generate_addresses(config):
-        identity = labels.identity_for(to_addr_dict)
+    for package in args.generate_addresses(config):
+        ship_one(
+            easypost_client,
+            from_addr,
+            package,
+            config=config,
+            args=args,
+            logo=logo,
+            log_dir=log_dir,
+        )
+        report_pending_labels()
 
+
+def fetch_until_ok(message: str, fetch: typing.Callable[[], T]) -> T:
+    """Run a startup step that needs the IBP server or EasyPost until it works.
+
+    Nothing can be shipped without it, so a failure doesn't end shippy: as
+    with the printer gate, the volunteer fixes the connection and presses
+    Enter to try again, or Ctrl+C to quit.
+    """
+    while True:
+        try:
+            with console.task_message(message):
+                return fetch()
+        except (*SERVER_ERRORS, easypost.errors.EasyPostError) as exc:
+            logger.error("%s failed", message, exc_info=exc)
+            service = (
+                "EasyPost"
+                if isinstance(exc, easypost.errors.EasyPostError)
+                else "the IBP server"
+            )
+            questionary.print(
+                f"  Can't reach {service}. Check the internet connection, then "
+                "press Enter to try again (Ctrl+C to quit).",
+                style="fg:red",
+            )
+
+        try:
+            input()
+        except KeyboardInterrupt:
+            sys.exit(130)
+
+
+def report_server_unreachable(exc: requests.RequestException) -> None:
+    """Tell the volunteer a package's address couldn't be fetched."""
+    logger.error("IBP server request failed", exc_info=exc)
+    questionary.print(
+        f"  Can't reach the IBP server. {NOT_BOUGHT_ADVICE}", style="fg:red"
+    )
+
+
+class PurchaseFailed(Exception):
+    """EasyPost failed during the buy itself (``error``), not before it."""
+
+    def __init__(self, error: easypost.errors.EasyPostError):
+        super().__init__(str(error))
+        self.error = error
+
+
+def purchase_may_have_completed(exc: Exception) -> bool:
+    """Whether a buy that raised ``exc`` may still have bought the label.
+
+    A 4xx answer (other than a timeout) means EasyPost turned the purchase
+    down, e.g. for an empty wallet. No answer, a timeout or a 5xx may have
+    come after the charge went through.
+    """
+    status = getattr(exc, "http_status", None)
+    refused = isinstance(status, int) and 400 <= status < 500 and status != 408
+    return not refused
+
+
+def report_shipping_error(
+    exc: easypost.errors.EasyPostError,
+    reference: typing.Optional[str],
+    *,
+    maybe_bought: bool,
+) -> None:
+    """Tell the volunteer EasyPost failed for this package, and log it."""
+    logger.error(
+        "EasyPost failed for %s (%s)",
+        reference,
+        "purchase may have completed" if maybe_bought else "nothing bought",
+        exc_info=exc,
+    )
+    if isinstance(exc, easypost.errors.FilteringError):
+        problem = (
+            "No USPS rate was quoted for this package. Check the address and weight."
+        )
+    else:
+        problem = f"EasyPost reported a problem: {exc.message}"
+    advice = MAYBE_BOUGHT_ADVICE if maybe_bought else NOT_BOUGHT_ADVICE
+    questionary.print(f"  {problem}\n  {advice}", style="fg:red")
+
+
+def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
+    easypost_client,
+    from_addr,
+    package: tuple,
+    *,
+    config: Config,
+    args: argparse.Namespace,
+    logo: Image.Image | None,
+    log_dir: pathlib.Path,
+) -> None:
+    """Buy and print postage for one package from ``args.generate_addresses``.
+
+    An EasyPost failure is shown and logged, and the volunteer goes on to the
+    next package. Nothing is refunded or checked here for a buy that may have
+    gone through: an unused label is refunded by the weekly job.
+    """
+    to_addr_dict, weight, small_box, reference = package
+    identity = labels.identity_for(to_addr_dict)
+
+    try:
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
         verify_address(
             easypost_client, to_addr, typed=args.shipping_type in TYPED_ADDRESS_MODES
         )
 
-        weight = 16.0 * weight  # Convert to ounces.
-
         if not args.preview and not check_printer_before_purchase():
-            continue
+            return
 
         shipment = purchase_postage(
             easypost_client,
             from_addr,
             to_addr,
-            weight,
+            16.0 * weight,  # Convert to ounces.
             config.parcel.dimensions(small_box),
             reference=reference,
         )
-        record = labels.record_purchase(identity, shipment)
-
-        ship_label(
-            easypost_client,
-            shipment,
-            logo,
-            args.preview,
-            log_dir,
-            journal=(identity, record),
+    except PurchaseFailed as failed:
+        report_shipping_error(
+            failed.error,
+            reference,
+            maybe_bought=purchase_may_have_completed(failed.error),
         )
-        report_pending_labels()
+        return
+    except easypost.errors.EasyPostError as exc:
+        report_shipping_error(exc, reference, maybe_bought=False)
+        return
+
+    record = labels.record_purchase(identity, shipment)
+
+    ship_label(
+        easypost_client,
+        shipment,
+        logo,
+        args.preview,
+        log_dir,
+        journal=(identity, record),
+    )
 
 
 def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
@@ -657,6 +806,10 @@ def purchase_postage(  # pylint: disable=too-many-arguments
     """Quote the package, show the rates being compared, then buy the cheapest.
 
     ``reference`` tags the shipment with what it was bought for.
+
+    Raises:
+        PurchaseFailed: EasyPost failed during the buy itself.
+        easypost.errors.EasyPostError: it failed before the buy.
     """
     with console.task_message("Getting rates"):
         quote = shipping.quote_shipment(
@@ -670,7 +823,10 @@ def purchase_postage(  # pylint: disable=too-many-arguments
     rate = shipping.cheapest_rate(quote)
     show_rate_summary(shipping.summarize_rates(quote.rates, rate))
     with console.task_message("Purchasing postage"):
-        return shipping.buy_shipment(easypost_client, quote, rate)
+        try:
+            return shipping.buy_shipment(easypost_client, quote, rate)
+        except easypost.errors.EasyPostError as exc:
+            raise PurchaseFailed(exc) from exc
 
 
 def show_rate_summary(summary: shipping.RateSummary) -> None:
