@@ -5,8 +5,8 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 
-import ibp_printing
-
+from shippy.core.log import GUI_APP
+from shippy.core.log import configure_logging as configure_printer_logging
 from shippy.gui.core.constants import LOG_BACKUP_COUNT, LOG_MAX_BYTES
 
 
@@ -36,5 +36,4 @@ def configure_logging(log_path: str) -> Path:
     root_logger.setLevel(logging.INFO)
     root_logger.addHandler(handler)
 
-    # The GUI has no console (pythonw); everything goes to the log files.
-    return ibp_printing.configure_logging(app="shippy-gui", console=False)
+    return configure_printer_logging(GUI_APP)

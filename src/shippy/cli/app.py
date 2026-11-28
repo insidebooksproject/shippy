@@ -18,7 +18,6 @@ import requests
 from ibp_printing import (
     PrintError,
     PrintResult,
-    configure_logging,
     discover,
     get_backend,
     print_to_first_available,
@@ -29,17 +28,13 @@ from ibp_printing.log import get_logger
 from PIL import Image
 
 from . import console, labels, printer_gate, shipping
+from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
 from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
 from .models import Config
 from .server import Server, ServerError, to_easypost_address
 
 # How long to follow a spooled label job before giving up on knowing its outcome.
 PRINT_TRACK_TIMEOUT_S = 30.0
-
-# Name passed to ibp-printing so shippy gets its own printer log files.
-LOG_APP_NAME = "shippy"
-# diagnose-printer may run next to a shipping session; give it its own files.
-DIAG_LOG_APP_NAME = "diag"
 
 logger = get_logger("shippy")
 
@@ -334,7 +329,7 @@ def generate_addresses_manual(config: Config):
 
 def run_diagnose_printer(_args):
     """Print a snapshot of printer/USB state to help debug detection failures."""
-    log_dir = configure_logging(app=DIAG_LOG_APP_NAME, console=False)
+    log_dir = configure_logging(DIAG_APP)
     print(
         build_report(discover(), get_backend().recent_print_events(), log_dir=log_dir)
     )
@@ -584,7 +579,7 @@ def close_after_unexpected_error(exc: Exception) -> typing.NoReturn:
     sets them up.
     """
     # Safe to call again; also covers a failure before logging was set up.
-    log_dir = configure_logging(app=LOG_APP_NAME, console=False)
+    log_dir = configure_logging(CLI_APP)
     logger.critical("unexpected error; closing shippy", exc_info=exc)
     questionary.print(
         f"\n  shippy hit a problem it didn't expect. The details are in {log_dir}. "
@@ -599,7 +594,7 @@ def close_after_unexpected_error(exc: Exception) -> typing.NoReturn:
 def ship(args: argparse.Namespace) -> None:
     """Run a shipping session until the volunteer closes shippy."""
     config = load_config(args.config)
-    log_dir = configure_logging(app=LOG_APP_NAME, console=False)
+    log_dir = configure_logging(CLI_APP)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
 
