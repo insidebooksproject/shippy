@@ -7,6 +7,8 @@ from easypost import EasyPostClient
 from easypost.models import Address as EasyPostAddress
 from easypost.models import Shipment as EasyPostShipment
 
+from shippy.core.rates import COMPARED_SERVICES, quoted_prices, service_name
+
 # Each shipment's EasyPost ``reference`` says what the label was bought for, so
 # the IBP server can match labels to requests later. Only one of these forms:
 #   ibp1:req:<request code>              an individual package
@@ -62,17 +64,6 @@ def unit_reference(jurisdiction: Any, name: Any) -> str:
     return f"ibp1:unit:{jurisdiction}:{name}"[:MAX_REFERENCE_LENGTH]
 
 
-# Services shown side by side before buying (EasyPost service names).
-COMPARED_SERVICES = ("LibraryMail", "GroundAdvantage")
-
-SERVICE_NAMES = {
-    "LibraryMail": "Library Mail",
-    "GroundAdvantage": "Ground Advantage",
-    "MediaMail": "Media Mail",
-    "Priority": "Priority Mail",
-}
-
-
 def build_address(client: EasyPostClient, **kwargs) -> EasyPostAddress:
     """Build easypost Address."""
     kwargs["zip"] = kwargs.pop("zipcode")
@@ -125,11 +116,6 @@ def buy_shipment(
     return client.shipment.buy(shipment.id, rate=rate)
 
 
-def service_name(service: str) -> str:
-    """Volunteer-facing name of an EasyPost service."""
-    return SERVICE_NAMES.get(service, service)
-
-
 @dataclass(frozen=True)
 class RateSummary:
     """What to show before buying: the price comparison and any warning."""
@@ -144,11 +130,11 @@ def summarize_rates(rates, chosen) -> RateSummary:
     ``rates`` are the shipment's quoted rates (objects with ``carrier``,
     ``service`` and ``rate``); ``chosen`` is the rate about to be bought.
     """
-    quoted: dict[str, float] = {}
-    for rate in rates:
-        if rate.carrier == "USPS" and rate.service in COMPARED_SERVICES:
-            price = float(rate.rate)
-            quoted[rate.service] = min(price, quoted.get(rate.service, price))
+    quoted = {
+        service: price
+        for service, price in quoted_prices(rates).items()
+        if service in COMPARED_SERVICES
+    }
 
     parts = [
         f"{service_name(service)} ${quoted[service]:.2f}"

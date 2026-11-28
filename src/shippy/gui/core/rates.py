@@ -3,21 +3,13 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from shippy.gui.core.constants import SHIPMENT_CARRIER
-
-LIBRARY_MAIL = "LibraryMail"
-GROUND_ADVANTAGE = "GroundAdvantage"
-
-# Services always shown side by side, in this order, when they were quoted.
-COMPARED_SERVICES = (LIBRARY_MAIL, GROUND_ADVANTAGE)
-
-SERVICE_NAMES = {
-    LIBRARY_MAIL: "Library Mail",
-    GROUND_ADVANTAGE: "Ground Advantage",
-    "MediaMail": "Media Mail",
-    "Priority": "Priority Mail",
-    "Express": "Priority Mail Express",
-}
+from shippy.core.rates import (
+    COMPARED_SERVICES,
+    LIBRARY_MAIL,
+    quoted_prices,
+    rate_price,
+    service_name,
+)
 
 
 @dataclass(frozen=True)
@@ -26,18 +18,6 @@ class RateSummary:
 
     text: str
     library_mail_missing: bool
-
-
-def service_name(service: str) -> str:
-    """Volunteer-facing name of an EasyPost USPS service code."""
-    return SERVICE_NAMES.get(service, service)
-
-
-def _price(rate: Any) -> Optional[float]:
-    try:
-        return float(rate.rate)
-    except (AttributeError, TypeError, ValueError):
-        return None
 
 
 def summarize_rates(shipment: Any) -> Optional[RateSummary]:
@@ -50,17 +30,11 @@ def summarize_rates(shipment: Any) -> Optional[RateSummary]:
     rates = getattr(shipment, "rates", None)
     if not isinstance(rates, (list, tuple)):
         return None
-    quoted: dict[str, float] = {}
-    for rate in rates:
-        price = _price(rate)
-        if getattr(rate, "carrier", None) != SHIPMENT_CARRIER or price is None:
-            continue
-        service = str(getattr(rate, "service", ""))
-        quoted[service] = min(price, quoted.get(service, price))
+    quoted = quoted_prices(rates)
 
     selected = getattr(shipment, "selected_rate", None)
     bought_service = str(getattr(selected, "service", "") or "")
-    bought_price = _price(selected) if selected is not None else None
+    bought_price = rate_price(selected) if selected is not None else None
     if not quoted and bought_price is None:
         return None
 
