@@ -4,7 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from shippy.cli import app as cli, console, shipping
+from shippy.cli import app as cli, console
+from shippy.cli.rates import summarize_rates
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB
 
 
@@ -69,11 +70,11 @@ class QuerySmallBoxTests(unittest.TestCase):
 
 
 class SummarizeRatesTests(unittest.TestCase):
-    """shipping.summarize_rates()."""
+    """rates.summarize_rates()."""
 
     def test_both_services_shown_and_cheapest_named(self):
         rates = [rate("LibraryMail", 9.12), rate("GroundAdvantage", 8.4)]
-        summary = shipping.summarize_rates(rates, rates[1])
+        summary = summarize_rates(rates, rates[1])
         self.assertEqual(
             summary.line,
             "Library Mail $9.12 · Ground Advantage $8.40 "
@@ -87,21 +88,21 @@ class SummarizeRatesTests(unittest.TestCase):
             rate("Priority", 11.0),
             rate("GroundAdvantage", 3.0, carrier="UPS"),
         ]
-        summary = shipping.summarize_rates(rates, rates[0])
+        summary = summarize_rates(rates, rates[0])
         self.assertEqual(
             summary.line, "Library Mail $5.57 → buying Library Mail $5.57 (cheapest)"
         )
 
     def test_missing_library_mail_warns(self):
         rates = [rate("GroundAdvantage", 8.4), rate("Priority", 11.0)]
-        summary = shipping.summarize_rates(rates, rates[0])
+        summary = summarize_rates(rates, rates[0])
         self.assertIn("Ground Advantage $8.40", summary.line)
         self.assertIsNotNone(summary.warning)
         self.assertIn("Library Mail", summary.warning)
 
     def test_nothing_compared_still_names_purchase(self):
         rates = [rate("Priority", 11.0)]
-        summary = shipping.summarize_rates(rates, rates[0])
+        summary = summarize_rates(rates, rates[0])
         self.assertEqual(summary.line, "Buying Priority Mail $11.00 (cheapest)")
         self.assertIsNotNone(summary.warning)
 

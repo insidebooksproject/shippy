@@ -1,13 +1,19 @@
-"""Postage convenience functions."""
+"""Buying USPS postage through EasyPost, the same way in both apps."""
 
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Union
 
 from easypost import EasyPostClient
 from easypost.models import Address as EasyPostAddress
 from easypost.models import Shipment as EasyPostShipment
 
-from shippy.core.rates import COMPARED_SERVICES, quoted_prices, service_name
+from shippy.core.rates import CARRIER
+
+# Volunteers weigh packages in pounds; EasyPost wants ounces.
+OUNCES_PER_POUND = 16
+
+# Every package goes as a "Parcel" and asks for Library Mail rates too.
+PREDEFINED_PACKAGE = "Parcel"
+LIBRARY_MAIL_ELIGIBILITY = "USPS.LIBRARYMAIL"
 
 # Each shipment's EasyPost ``reference`` says what the label was bought for, so
 # the IBP server can match labels to requests later. Only one of these forms:
@@ -64,18 +70,33 @@ def unit_reference(jurisdiction: Any, name: Any) -> str:
     return f"ibp1:unit:{jurisdiction}:{name}"[:MAX_REFERENCE_LENGTH]
 
 
-def build_address(client: EasyPostClient, **kwargs) -> EasyPostAddress:
-    """Build easypost Address."""
-    kwargs["zip"] = kwargs.pop("zipcode")
-    kwargs["country"] = "US"
-    kwargs["phone"] = ""
-    return client.address.create(**kwargs)
+def easypost_address(fields: Mapping[str, Any]) -> dict[str, Any]:
+    """EasyPost address fields for an address as the apps hold it.
+
+    The IBP server, Google Maps parsing and shippy-gui's form all say
+    ``zipcode``; EasyPost wants ``zip``. Every address is in the US and is
+    sent without a phone number.
+    """
+    data = dict(fields)
+    data["zip"] = data.pop("zipcode")
+    data["country"] = "US"
+    data["phone"] = ""
+    return data
+
+
+def build_address(client: EasyPostClient, **fields) -> EasyPostAddress:
+    """Create an EasyPost address from an address as the apps hold it."""
+    return client.address.create(**easypost_address(fields))
+
+
+# An EasyPost address object, or a reference to one by id: {"id": "adr_..."}.
+AddressRef = Union[EasyPostAddress, Mapping[str, str]]
 
 
 def quote_shipment(  # pylint: disable=too-many-arguments
     client: EasyPostClient,
-    from_address: EasyPostAddress,
-    to_address: EasyPostAddress,
+    from_address: AddressRef,
+    to_address: AddressRef,
     weight: float,
     dimensions: tuple[float, float, float],
     *,
@@ -88,7 +109,7 @@ def quote_shipment(  # pylint: disable=too-many-arguments
     """
     length, width, height = dimensions
     parcel = client.parcel.create(
-        predefined_package="Parcel",
+        predefined_package=PREDEFINED_PACKAGE,
         weight=weight,
         length=length,
         width=width,
@@ -99,14 +120,14 @@ def quote_shipment(  # pylint: disable=too-many-arguments
         from_address=from_address,
         to_address=to_address,
         parcel=parcel,
-        options={"special_rates_eligibility": "USPS.LIBRARYMAIL"},
+        options={"special_rates_eligibility": LIBRARY_MAIL_ELIGIBILITY},
         **tag,
     )
 
 
 def cheapest_rate(shipment: EasyPostShipment):
     """The cheapest USPS rate quoted for ``shipment``."""
-    return shipment.lowest_rate(["USPS"])
+    return shipment.lowest_rate([CARRIER])
 
 
 def buy_shipment(
@@ -114,42 +135,3 @@ def buy_shipment(
 ) -> EasyPostShipment:
     """Buy ``rate`` for a quoted shipment."""
     return client.shipment.buy(shipment.id, rate=rate)
-
-
-@dataclass(frozen=True)
-class RateSummary:
-    """What to show before buying: the price comparison and any warning."""
-
-    line: str
-    warning: Optional[str] = None
-
-
-def summarize_rates(rates, chosen) -> RateSummary:
-    """Compare Library Mail and Ground Advantage and name the rate being bought.
-
-    ``rates`` are the shipment's quoted rates (objects with ``carrier``,
-    ``service`` and ``rate``); ``chosen`` is the rate about to be bought.
-    """
-    quoted = {
-        service: price
-        for service, price in quoted_prices(rates).items()
-        if service in COMPARED_SERVICES
-    }
-
-    parts = [
-        f"{service_name(service)} ${quoted[service]:.2f}"
-        for service in COMPARED_SERVICES
-        if service in quoted
-    ]
-    chosen_name = service_name(chosen.service)
-    buying = f"{chosen_name} ${float(chosen.rate):.2f} (cheapest)"
-    line = f"{' · '.join(parts)} → buying {buying}" if parts else f"Buying {buying}"
-
-    warning = None
-    if "LibraryMail" not in quoted:
-        warning = (
-            "No Library Mail rate was quoted for this package, so it is not "
-            "being sent Library Mail. Check the address and weight if that "
-            "is unexpected."
-        )
-    return RateSummary(line=line, warning=warning)

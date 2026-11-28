@@ -45,7 +45,7 @@ class ServerError(Exception):
 
 
 def to_easypost_address(name: str, data: dict[str, typing.Any]) -> dict[str, str]:
-    """Build the 6-field address dict expected by shipping.build_address."""
+    """Build the 6-field address dict expected by postage.build_address."""
     return {
         "name": name,
         "street1": data["street1"],

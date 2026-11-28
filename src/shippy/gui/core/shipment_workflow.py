@@ -13,10 +13,10 @@ from PIL import Image
 
 from shippy.gui.core import label_journal
 from shippy.gui.core.constants import (
-    OUNCES_PER_POUND,
     PRINT_JOB_NAME,
 )
 from shippy.core.misc import add_logo, grab_png_from_url
+from shippy.core.postage import OUNCES_PER_POUND
 from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
 from shippy.gui.core.rates import RateSummary, summarize_rates
 from shippy.gui.core.services import PurchaseError, ShipmentService

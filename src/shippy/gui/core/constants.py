@@ -60,18 +60,6 @@ LOG_BACKUP_COUNT = 3
 # Shipping Constants
 # ============================================================================
 
-# Service Configuration
-SHIPMENT_COUNTRY = "US"
-SHIPMENT_CARRIER = "USPS"
-SHIPMENT_SERVICE = "USPS.LIBRARYMAIL"
-PARCEL_PREDEFINED_PACKAGE = "Parcel"
-
-# Each shipment's EasyPost ``reference`` says what the label was bought for, so
-# the IBP server can match labels to requests later. shippy-gui only ships to
-# typed addresses, so every label it buys is tagged as manual (shippy's CLI
-# also uses ``ibp1:req:<code>`` and ``ibp1:unit:<jurisdiction>:<name>``).
-SHIPMENT_REFERENCE = "ibp1:manual"
-
 # The declared parcel (the [parcel] section, shippy.core.models.ParcelConfig):
 # Ground Advantage is priced on actual weight only for boxes of at most one
 # cubic foot (1,728 cu in); bigger boxes, like the default 20 x 14 x 10, pay
@@ -92,10 +80,6 @@ SMALL_BOX_MAX_SIDE_IN = MAX_SIDE_IN
 WEIGHT_MIN_LBS = 1
 WEIGHT_MAX_LBS = 70
 DEFAULT_WEIGHT_LBS = 3
-
-# Ounces per pound for weight conversion
-OUNCES_PER_POUND = 16
-
 
 # How long to let an in-flight shipment finish when the window closes. A
 # shipment interrupted between buying postage and refunding it strands money,

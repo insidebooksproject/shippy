@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import easypost
 
-from shippy.gui.core.constants import PARCEL_PREDEFINED_PACKAGE
+from shippy.core.postage import PREDEFINED_PACKAGE as PARCEL_PREDEFINED_PACKAGE
 from shippy.gui.core.models import ParcelConfig
 from shippy.gui.core.services import (
     PurchaseError,

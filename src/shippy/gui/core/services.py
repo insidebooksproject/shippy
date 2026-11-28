@@ -4,12 +4,7 @@ from typing import Any
 
 import easypost  # type: ignore[import-not-found] # pylint: disable=import-error
 
-from shippy.gui.core.constants import (
-    SHIPMENT_CARRIER,
-    SHIPMENT_REFERENCE,
-    SHIPMENT_SERVICE,
-    PARCEL_PREDEFINED_PACKAGE,
-)
+from shippy.core.postage import MANUAL_REFERENCE, cheapest_rate, quote_shipment
 from shippy.gui.core.models import AddressBase, ParcelConfig
 
 
@@ -73,24 +68,18 @@ class ShipmentService:
         # never understates postage, but a much smaller box could fall in a
         # cheaper cubic tier that this misses. Known and deferred until real
         # dimensions or a box picker.
-        length, width, height = self.parcel_config.dimensions(small_box)
-        parcel = self.client.parcel.create(
-            predefined_package=PARCEL_PREDEFINED_PACKAGE,
-            weight=weight_oz,
-            length=length,
-            width=width,
-            height=height,
+        # shippy-gui only ships to typed addresses, so every label it buys is
+        # tagged as manual.
+        shipment = quote_shipment(
+            self.client,
+            {"id": from_addr_id},
+            {"id": to_addr_id},
+            weight_oz,
+            self.parcel_config.dimensions(small_box),
+            reference=MANUAL_REFERENCE,
         )
 
-        shipment = self.client.shipment.create(
-            from_address={"id": from_addr_id},
-            to_address={"id": to_addr_id},
-            parcel=parcel,
-            options={"special_rates_eligibility": SHIPMENT_SERVICE},
-            reference=SHIPMENT_REFERENCE,
-        )
-
-        rate = shipment.lowest_rate([SHIPMENT_CARRIER])
+        rate = cheapest_rate(shipment)
         try:
             return self.client.shipment.buy(shipment.id, rate=rate)
         except Exception as error:

@@ -4,12 +4,12 @@ from typing import Any, Optional
 from pydantic import BaseModel, field_validator
 
 from shippy.core import models as core_models
+from shippy.core.postage import easypost_address
 from shippy.gui.core.constants import (
     DEFAULT_FONT_SIZE,
     DEFAULT_WEIGHT_LBS,
     FONT_SIZE_MIN,
     FONT_SIZE_MAX,
-    SHIPMENT_COUNTRY,
     WEIGHT_MIN_LBS,
     WEIGHT_MAX_LBS,
 )
@@ -64,12 +64,7 @@ class AddressBase(BaseModel):
 
     def to_easypost_dict(self) -> dict:
         """Convert to EasyPost address dictionary."""
-        data = self.model_dump(exclude_none=True)
-        # EasyPost uses 'zip' instead of 'zipcode'
-        data["zip"] = data.pop("zipcode")
-        data["country"] = SHIPMENT_COUNTRY
-        data["phone"] = ""
-        return data
+        return easypost_address(self.model_dump(exclude_none=True))
 
 
 class ReturnAddressConfig(AddressBase):

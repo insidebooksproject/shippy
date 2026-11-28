@@ -27,7 +27,8 @@ from ibp_printing.diagnostics import build_report
 from ibp_printing.log import get_logger
 from PIL import Image
 
-from . import console, labels, printer_gate, shipping
+from . import console, labels, printer_gate, rates
+from shippy.core import postage
 from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
 from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
@@ -96,7 +97,7 @@ def build_unit_choices(units: list[dict]) -> dict[str, tuple[str, str]]:
 
 
 def generate_addresses_bulk(config: Config):
-    """Generate addresses for bulk shipping."""
+    """Generate addresses for bulk postage."""
     server = Server.from_config(config.ibp)
 
     recipient_name = fetch_until_ok(
@@ -116,7 +117,7 @@ def generate_addresses_bulk(config: Config):
             continue
 
         jurisdiction, name = units[unit]
-        reference = shipping.unit_reference(jurisdiction, name)
+        reference = postage.unit_reference(jurisdiction, name)
         try:
             with console.task_message("Grabbing unit address from IBP server"):
                 unit_data = server.unit(jurisdiction, name)
@@ -273,7 +274,7 @@ def check_request_address(
 
 
 def generate_addresses_individual(config: Config):
-    """Generate addresses for individual shipping."""
+    """Generate addresses for individual postage."""
     server = Server.from_config(config.ibp)
 
     while True:
@@ -295,7 +296,7 @@ def generate_addresses_individual(config: Config):
             continue
 
         to_addr = to_easypost_address(address["name"], address)
-        reference = shipping.request_reference(address)
+        reference = postage.request_reference(address)
 
         weight = console.query_weight()
         if weight is None:
@@ -308,7 +309,7 @@ def generate_addresses_individual(config: Config):
 
 
 def generate_addresses_manual(config: Config):
-    """Generate addresses for manual shipping."""
+    """Generate addresses for manual postage."""
     gmaps = googlemaps.Client(key=config.googlemaps.apikey)
 
     while True:
@@ -324,7 +325,7 @@ def generate_addresses_manual(config: Config):
         if small_box is None:
             continue
 
-        yield to_addr, weight, small_box, shipping.MANUAL_REFERENCE
+        yield to_addr, weight, small_box, postage.MANUAL_REFERENCE
 
 
 def run_diagnose_printer(_args):
@@ -618,7 +619,7 @@ def ship(args: argparse.Namespace) -> None:
     server = Server.from_config(config.ibp)
     from_addr = fetch_until_ok(
         "Grabbing return address from IBP server",
-        lambda: shipping.build_address(easypost_client, **server.return_address()),
+        lambda: postage.build_address(easypost_client, **server.return_address()),
         what="the return address",
     )
 
@@ -631,7 +632,7 @@ def ship(args: argparse.Namespace) -> None:
         )
     except easypost.errors.InvalidRequestError:
         questionary.print(
-            "  Failed to verify return address, consider double-checking before shipping.",
+            "  Failed to verify return address, consider double-checking before postage.",
             style="fg:yellow",
         )
 
@@ -776,7 +777,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
     identity = labels.identity_for(to_addr_dict)
 
     try:
-        to_addr = shipping.build_address(easypost_client, **to_addr_dict)
+        to_addr = postage.build_address(easypost_client, **to_addr_dict)
         verify_address(
             easypost_client, to_addr, typed=args.shipping_type in TYPED_ADDRESS_MODES
         )
@@ -788,7 +789,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
             easypost_client,
             from_addr,
             to_addr,
-            16.0 * weight,  # Convert to ounces.
+            float(postage.OUNCES_PER_POUND * weight),
             config.parcel.dimensions(small_box),
             reference=reference,
         )
@@ -816,7 +817,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
 
 
 def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
-    """Check a recipient address with EasyPost; a failure never blocks shipping.
+    """Check a recipient address with EasyPost; a failure never blocks postage.
 
     Only a typed address (``typed``, manual mode) is something the volunteer
     can double-check, so only then is the check shown. Addresses from the IBP
@@ -838,7 +839,7 @@ def verify_address(easypost_client, to_addr, *, typed: bool) -> None:
         if typed:
             questionary.print(
                 "  Failed to verify address, consider double-checking before "
-                "shipping.",
+                "postage.",
                 style=WARNING_STYLE,
             )
 
@@ -861,7 +862,7 @@ def purchase_postage(  # pylint: disable=too-many-arguments
         easypost.errors.EasyPostError: it failed before the buy.
     """
     with console.task_message("Getting rates"):
-        quote = shipping.quote_shipment(
+        quote = postage.quote_shipment(
             easypost_client,
             from_addr,
             to_addr,
@@ -869,16 +870,16 @@ def purchase_postage(  # pylint: disable=too-many-arguments
             dimensions,
             reference=reference,
         )
-    rate = shipping.cheapest_rate(quote)
-    show_rate_summary(shipping.summarize_rates(quote.rates, rate))
+    rate = postage.cheapest_rate(quote)
+    show_rate_summary(rates.summarize_rates(quote.rates, rate))
     with console.task_message("Purchasing postage"):
         try:
-            return shipping.buy_shipment(easypost_client, quote, rate)
+            return postage.buy_shipment(easypost_client, quote, rate)
         except easypost.errors.EasyPostError as exc:
             raise PurchaseFailed(exc) from exc
 
 
-def show_rate_summary(summary: shipping.RateSummary) -> None:
+def show_rate_summary(summary: rates.RateSummary) -> None:
     """Print the price comparison (and any warning) before buying."""
     questionary.print(f"  {summary.line}", style="fg:white")
     if summary.warning:
