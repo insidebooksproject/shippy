@@ -207,7 +207,7 @@ class ApiErrorTests(MainLoopCase):
         self.assertEqual(self.client.shipment.buy.call_count, 2)
         self.assertEqual(self.ship_label.call_count, 1)
 
-    def test_buy_refused_bought_nothing(self):
+    def test_buy_payment_refused_asks_for_a_coordinator(self):
         self.client.shipment.buy.side_effect = [
             easypost.errors.PaymentError("Insufficient funds.", http_status=402),
             mock.DEFAULT,
@@ -215,7 +215,20 @@ class ApiErrorTests(MainLoopCase):
         self.run_main()
 
         self.assertIn("Insufficient funds.", self.printed_text())
+        self.assertIn(cli.CANT_PAY_ADVICE, self.printed_text())
+        self.assertNotIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertNotIn(cli.MAYBE_BOUGHT_ADVICE, self.printed_text())
+        self.assertEqual(self.ship_label.call_count, 1)
+
+    def test_buy_refused_bought_nothing(self):
+        self.client.shipment.buy.side_effect = [
+            easypost.errors.InvalidRequestError("Rate expired.", http_status=422),
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
         self.assertIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertNotIn(cli.MAYBE_BOUGHT_ADVICE, self.printed_text())
         self.assertEqual(self.ship_label.call_count, 1)
 
     def test_unit_fetch_network_error_skips_the_package(self):

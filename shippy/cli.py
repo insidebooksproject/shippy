@@ -65,6 +65,10 @@ MAYBE_BOUGHT_ADVICE = (
     "The purchase may not have completed. Try this package again; an unused "
     "label is refunded automatically."
 )
+CANT_PAY_ADVICE = (
+    "The EasyPost account can't pay for postage right now. Tell a coordinator; "
+    "no postage was bought."
+)
 
 # Failures reaching the IBP server: a 4xx it reported, or no usable answer.
 SERVER_ERRORS = (ServerError, requests.RequestException)
@@ -727,7 +731,12 @@ def report_shipping_error(
         )
     else:
         problem = f"EasyPost reported a problem: {exc.message}"
-    advice = MAYBE_BOUGHT_ADVICE if maybe_bought else NOT_BOUGHT_ADVICE
+    if isinstance(exc, easypost.errors.PaymentError):
+        advice = CANT_PAY_ADVICE
+    elif maybe_bought:
+        advice = MAYBE_BOUGHT_ADVICE
+    else:
+        advice = NOT_BOUGHT_ADVICE
     questionary.print(f"  {problem}\n  {advice}", style="fg:red")
 
 
