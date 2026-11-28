@@ -1,13 +1,18 @@
-name: Lint
+name: CI
 
 on:
   push:
   pull_request:
 
 jobs:
-  uv-example:
-    name: python
-    runs-on: ubuntu-latest
+  check:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v7
@@ -18,10 +23,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: "Set up Python"
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version-file: "pyproject.toml"
+          python-version-file: ".python-version"
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
@@ -36,4 +41,5 @@ jobs:
         run: uv run mypy shippy
 
       - name: Test
+        timeout-minutes: 10
         run: uv run pytest

@@ -102,7 +102,7 @@ ignore-patterns = ["^\\.#"]
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
-init-hook = 'import sys; sys.path.extend(["venv/lib/python3.11/site-packages"])'
+# init-hook =
 
 # Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
 # number of processors available to use, and will cap the count on Windows to
@@ -123,7 +123,7 @@ persistent = true
 
 # Minimum Python version to use for version dependent checks. Will default to the
 # version used to run pylint.
-py-version = "3.11"
+py-version = "3.12"
 
 # Discover python modules and packages in the file system subtree.
 # recursive =
