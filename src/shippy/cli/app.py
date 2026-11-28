@@ -9,10 +9,12 @@ import os
 import pathlib
 import subprocess
 import sys
+import traceback
 import typing
 
 import easypost  # type: ignore
 import googlemaps  # type: ignore
+import pydantic
 import questionary
 import requests
 from ibp_printing import (
@@ -37,6 +39,7 @@ from shippy.core.label_image import (
     load_logo,
 )
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
+from shippy.core.redact import describe_config_error
 from shippy.core.printers import SHIPPING_LABEL
 
 from . import console, printer_gate, rates
@@ -587,7 +590,16 @@ def close_after_unexpected_error(exc: Exception) -> typing.NoReturn:
     """
     # Safe to call again; also covers a failure while logging was set up.
     log_dir = configure_logging(CLI_APP)
-    logger.critical("unexpected error; closing shippy", exc_info=exc)
+    if isinstance(exc, (configparser.Error, pydantic.ValidationError)):
+        # Their text repeats config.ini's lines or values (API keys), so the
+        # log gets what failed and where, not the message.
+        logger.critical(
+            "unexpected error; closing shippy: %s",
+            describe_config_error(exc),
+            extra={"data": {"stack": traceback.format_tb(exc.__traceback__)}},
+        )
+    else:
+        logger.critical("unexpected error; closing shippy", exc_info=exc)
     questionary.print(
         f"\n  shippy hit a problem it didn't expect. The details are in {log_dir}. "
         "Press Enter to close.",

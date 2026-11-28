@@ -1,5 +1,6 @@
 """Entry point for shippy-gui application."""
 
+import configparser
 import logging
 import os
 import sys
@@ -8,8 +9,8 @@ from PySide6.QtWidgets import QApplication  # type: ignore[import-untyped] # pyl
 from pydantic import ValidationError
 
 from shippy.core.log import GUI_APP, start_logging
+from shippy.core.redact import describe_config_error, describe_validation_error
 from shippy.gui.core.config import (
-    describe_validation_error,
     initialize_config_file,
     load_config,
     resolve_log_path,
@@ -76,11 +77,22 @@ def _load_required_config(config_path: str):
             sys.exit(1)
         return _reload_config_or_exit(config_path)
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Could not read config.ini", exc_info=True)
+        _log_read_error("Could not read config.ini", e)
         _show_config_error(
             f"Failed to read config file:\n\n{e}\n\nThe application will exit."
         )
         sys.exit(1)
+
+
+def _log_read_error(message: str, error: Exception) -> None:
+    """Log why config.ini could not be read, without the line it choked on.
+
+    A configparser error repeats that line, which can hold an API key.
+    """
+    if isinstance(error, configparser.Error):
+        logger.error("%s: %s", message, describe_config_error(error))
+    else:
+        logger.error(message, exc_info=error)
 
 
 def _show_config_error(message: str) -> None:
@@ -112,7 +124,7 @@ def _reload_config_or_exit(config_path: str):
         )
         sys.exit(1)
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Could not read config.ini after Settings", exc_info=True)
+        _log_read_error("Could not read config.ini after Settings", e)
         _show_config_error(
             f"Failed to read config file:\n\n{e}\n\nThe application will exit.",
         )

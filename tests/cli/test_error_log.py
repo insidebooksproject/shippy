@@ -44,8 +44,51 @@ def test_unexpected_error_is_logged_critical_and_exits_1(tmp_path, caplog):
 
     assert exited.value.code == 1
     assert [r.levelname for r in caplog.records] == ["CRITICAL"]
-    assert caplog.records[0].exc_info is not None
+    record = caplog.records[0]
+    # A config error is described (where it failed, not its text).
+    assert record.exc_info is None
+    assert "ValidationError: ibp: Field required" in record.getMessage()
+    assert any("load_config" in frame for frame in record.data["stack"])
     assert "didn't expect" in printed.call_args.args[0]
+
+
+def test_config_line_with_a_key_never_reaches_the_log(tmp_path, caplog):
+    """configparser repeats a line it can't parse, e.g. a key missing its '='."""
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[easypost]\napikey EZAKSECRETSECRETSECRET1234\n")
+    argv = ["shippy", "--config", str(config_path), "bulk"]
+    with (
+        mock.patch.object(sys, "argv", argv),
+        mock.patch.object(cli, "configure_logging", return_value=tmp_path),
+        mock.patch.object(cli.questionary, "print"),
+        mock.patch("builtins.input", return_value=""),
+        caplog.at_level(logging.ERROR, logger=LOGGER),
+        pytest.raises(SystemExit),
+    ):
+        cli.main()
+
+    assert [r.levelname for r in caplog.records] == ["CRITICAL"]
+    record = caplog.records[0]
+    assert record.exc_info is None
+    assert record.getMessage().endswith("ParsingError at line 2")
+    assert "SECRET" not in record.getMessage() + str(record.data)
+
+
+def test_other_unexpected_errors_keep_their_traceback(tmp_path, caplog):
+    argv = ["shippy", "--config", str(tmp_path / "config.ini"), "bulk"]
+    with (
+        mock.patch.object(sys, "argv", argv),
+        mock.patch.object(cli, "ship", side_effect=RuntimeError("boom")),
+        mock.patch.object(cli, "configure_logging", return_value=tmp_path),
+        mock.patch.object(cli.questionary, "print"),
+        mock.patch("builtins.input", return_value=""),
+        caplog.at_level(logging.ERROR, logger=LOGGER),
+        pytest.raises(SystemExit),
+    ):
+        cli.main()
+
+    assert [r.levelname for r in caplog.records] == ["CRITICAL"]
+    assert caplog.records[0].exc_info is not None
 
 
 def test_diagnose_printer_does_not_start_the_shipping_logs(tmp_path):

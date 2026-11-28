@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 from shippy.core import log
 from shippy.gui import __main__ as gui_main
+from shippy.gui.core.config_manager import ConfigManager
 from shippy.gui.shipping_coordinators import (
     AddressLookupCoordinator,
     ShippingStatusPresenter,
@@ -259,3 +260,36 @@ def test_failed_address_suggestions_reach_the_error_log_without_key_or_input(
     records = read_jsonl(error_log)
     assert [r["level"] for r in records] == [level]
     assert records[0]["msg"].startswith("Google Maps address suggestions failed: ")
+
+
+def test_unreadable_config_is_logged_without_its_lines(tmp_path, monkeypatch, caplog):
+    """configparser repeats the line it can't parse, e.g. a key missing '='."""
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[easypost]\napikey EZAKSECRETSECRETSECRET1234\n")
+    shown = []
+    monkeypatch.setattr(gui_main, "_show_config_error", shown.append)
+
+    with caplog.at_level(logging.INFO), pytest.raises(SystemExit):
+        gui_main._load_required_config(  # pylint: disable=protected-access
+            str(config_path)
+        )
+
+    assert "SECRET" in shown[0]  # The dialog is unchanged.
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert [r.getMessage() for r in errors] == [
+        "Could not read config.ini: ParsingError at line 2"
+    ]
+    assert errors[0].exc_info is None
+
+
+def test_config_manager_logs_config_errors_without_their_text(tmp_path, caplog):
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[easypost]\napikey EZAKSECRETSECRETSECRET1234\n")
+
+    with caplog.at_level(logging.ERROR, logger="shippy.gui.core.config_manager"):
+        assert ConfigManager(str(config_path)).load() is False
+
+    assert [r.getMessage() for r in caplog.records] == [
+        "Config Load Error: ParsingError at line 2"
+    ]
+    assert caplog.records[0].exc_info is None

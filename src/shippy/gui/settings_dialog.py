@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 from pydantic import ValidationError
 
-from shippy.gui.core.config import describe_validation_error
+from shippy.core.redact import describe_validation_error
 from shippy.gui.core.config_manager import ConfigManager
 from shippy.gui.core.constants import (
     DEFAULT_FONT_SIZE,
