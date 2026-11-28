@@ -8,8 +8,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 import easypost  # type: ignore
+import requests
 
 from shippy import cli, console
+from shippy.server import ServerError
 
 BASE_CONFIG = """\
 [ibp]
@@ -32,8 +34,12 @@ ADDRESS = {
 }
 
 
-class StopShipping(Exception):
-    """Ends the otherwise endless prompt loop."""
+class StopShipping(BaseException):
+    """Ends the otherwise endless prompt loop.
+
+    A BaseException, like KeyboardInterrupt, so that main()'s last-resort
+    handler for unexpected errors lets it through.
+    """
 
 
 def write_config(text: str) -> pathlib.Path:
@@ -44,7 +50,7 @@ def write_config(text: str) -> pathlib.Path:
     return pathlib.Path(name)
 
 
-class MainLoopTests(unittest.TestCase):
+class MainLoopCase(unittest.TestCase):
     """Two bulk shipments: a small box, then a large one."""
 
     def setUp(self):
@@ -59,7 +65,7 @@ class MainLoopTests(unittest.TestCase):
         quote.lowest_rate.return_value = quote.rates[0]
         self.client.shipment.create.return_value = quote
 
-        server = mock.Mock()
+        self.server = server = mock.Mock()
         server.return_address.return_value = dict(ADDRESS)
         server.shipping_settings.return_value = {"unit_recipient_name": ADDRESS["name"]}
         server.units.return_value = [{"jurisdiction": "Texas", "name": "Connally"}]
@@ -75,7 +81,6 @@ class MainLoopTests(unittest.TestCase):
             mock.patch.object(cli, "load_logo", return_value=None),
             mock.patch.object(cli.labels, "record_purchase", return_value=None),
             mock.patch.object(cli, "report_pending_labels"),
-            mock.patch.object(cli, "ship_label"),
             mock.patch.object(console.questionary, "print"),
             mock.patch.object(
                 console,
@@ -87,6 +92,12 @@ class MainLoopTests(unittest.TestCase):
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
+        ship_label = mock.patch.object(cli, "ship_label")
+        self.ship_label = ship_label.start()
+        self.addCleanup(ship_label.stop)
+        typed = mock.patch("builtins.input", return_value="")
+        self.input = typed.start()
+        self.addCleanup(typed.stop)
         printed = mock.patch.object(cli.questionary, "print")
         self.printed = printed.start()
         self.addCleanup(printed.stop)
@@ -94,6 +105,14 @@ class MainLoopTests(unittest.TestCase):
         self.confirm = confirm.start()
         self.addCleanup(confirm.stop)
         self.confirm.return_value.ask.side_effect = [True, False]
+
+    def printed_text(self) -> str:
+        """Everything shown to the volunteer."""
+        return "\n".join(str(call.args[0]) for call in self.printed.call_args_list)
+
+
+class MainLoopTests(MainLoopCase):
+    """Both shipments go through."""
 
     def test_box_answer_and_weight_reach_easypost_per_shipment(self):
         with self.assertRaises(StopShipping):
@@ -134,8 +153,183 @@ class MainLoopTests(unittest.TestCase):
         # The return address once, then each of the two unit addresses.
         self.assertEqual(self.client.address.verify.call_count, 3)
         self.assertEqual(self.client.shipment.buy.call_count, 2)
-        text = "\n".join(str(call.args[0]) for call in self.printed.call_args_list)
-        self.assertNotIn("Failed to verify address", text)
+        self.assertNotIn("Failed to verify address", self.printed_text())
+        # The return address's failed check only warns; it isn't retried.
+        self.assertIn("Failed to verify return address", self.printed_text())
+
+
+class ApiErrorTests(MainLoopCase):
+    """An EasyPost or IBP server failure skips one package, not the session."""
+
+    def run_main(self):
+        """Run both shipments, expecting one ERROR log record."""
+        with self.assertLogs("ibp_printing.shippy", "ERROR") as logs:
+            with self.assertRaises(StopShipping):
+                cli.main()
+        self.assertEqual(len(logs.records), 1)
+        self.assertIsNotNone(logs.records[0].exc_info)
+        self.client.shipment.refund.assert_not_called()
+
+    def test_quote_failure_skips_the_package(self):
+        self.client.shipment.create.side_effect = [
+            easypost.errors.InternalServerError("try later", http_status=500),
+            self.client.shipment.create.return_value,
+        ]
+        self.run_main()
+
+        self.assertIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertNotIn(cli.MAYBE_BOUGHT_ADVICE, self.printed_text())
+        # The second package is still quoted and bought.
+        self.assertEqual(self.client.shipment.create.call_count, 2)
+        self.assertEqual(self.client.shipment.buy.call_count, 1)
+        self.assertEqual(self.ship_label.call_count, 1)
+
+    def test_no_usps_rate_skips_the_package(self):
+        quote = self.client.shipment.create.return_value
+        quote.lowest_rate.side_effect = [
+            easypost.errors.FilteringError("No rates found."),
+            quote.rates[0],
+        ]
+        self.run_main()
+
+        self.assertIn("No USPS rate was quoted", self.printed_text())
+        self.assertIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertEqual(self.client.shipment.buy.call_count, 1)
+
+    def test_buy_timeout_may_have_bought(self):
+        self.client.shipment.buy.side_effect = [
+            easypost.errors.TimeoutError("Request timed out."),
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn(cli.MAYBE_BOUGHT_ADVICE, self.printed_text())
+        self.assertNotIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        # Nothing is retried or reconciled: the next package is bought as usual.
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
+        self.assertEqual(self.ship_label.call_count, 1)
+
+    def test_buy_payment_refused_asks_for_a_coordinator(self):
+        self.client.shipment.buy.side_effect = [
+            easypost.errors.PaymentError("Insufficient funds.", http_status=402),
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn("Insufficient funds.", self.printed_text())
+        self.assertIn(cli.CANT_PAY_ADVICE, self.printed_text())
+        self.assertNotIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertNotIn(cli.MAYBE_BOUGHT_ADVICE, self.printed_text())
+        self.assertEqual(self.ship_label.call_count, 1)
+
+    def test_buy_refused_bought_nothing(self):
+        self.client.shipment.buy.side_effect = [
+            easypost.errors.InvalidRequestError("Rate expired.", http_status=422),
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertNotIn(cli.MAYBE_BOUGHT_ADVICE, self.printed_text())
+        self.assertEqual(self.ship_label.call_count, 1)
+
+    def test_unit_fetch_network_error_skips_the_package(self):
+        self.server.unit.side_effect = [
+            requests.ConnectionError("no route to host"),
+            dict(ADDRESS),
+        ]
+        self.run_main()
+
+        self.assertIn("Can't reach the IBP server.", self.printed_text())
+        self.assertIn(cli.NOT_BOUGHT_ADVICE, self.printed_text())
+        self.assertEqual(self.client.shipment.buy.call_count, 1)
+
+    def test_return_address_failure_waits_for_enter(self):
+        self.server.return_address.side_effect = [
+            requests.ConnectionError("no route to host"),
+            dict(ADDRESS),
+        ]
+        self.run_main()
+
+        self.assertIn(
+            "Can't reach the IBP server. Check the internet connection, then "
+            "press Enter to try again (Ctrl+C to quit).",
+            self.printed_text(),
+        )
+        self.input.assert_called_once()
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
+
+    def test_return_address_rejected_by_easypost_asks_for_a_coordinator(self):
+        self.client.address.create.side_effect = [
+            easypost.errors.InvalidRequestError("Invalid zip.", http_status=422),
+            mock.DEFAULT,
+            mock.DEFAULT,
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn(
+            "EasyPost rejected the return address from the IBP server: Invalid "
+            "zip. Tell a coordinator; press Enter to try again (Ctrl+C to quit).",
+            self.printed_text(),
+        )
+        self.assertNotIn("Can't reach", self.printed_text())
+        self.input.assert_called_once()
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
+
+    def test_return_address_refused_by_server_asks_for_a_coordinator(self):
+        self.server.return_address.side_effect = [
+            ServerError(404, "Not Found"),
+            dict(ADDRESS),
+        ]
+        self.run_main()
+
+        self.assertIn(
+            "The IBP server turned down the request for the return address: Not "
+            "Found. Tell a coordinator; press Enter to try again (Ctrl+C to quit).",
+            self.printed_text(),
+        )
+        self.input.assert_called_once()
+
+    def test_return_address_verify_timeout_waits_for_enter(self):
+        self.client.address.verify.side_effect = [
+            easypost.errors.TimeoutError("Request timed out."),
+            mock.DEFAULT,
+            mock.DEFAULT,
+            mock.DEFAULT,
+        ]
+        self.run_main()
+
+        self.assertIn("Can't reach EasyPost.", self.printed_text())
+        self.input.assert_called_once()
+        # The failed check, its retry, then each of the two unit addresses.
+        self.assertEqual(self.client.address.verify.call_count, 4)
+        self.assertEqual(self.client.shipment.buy.call_count, 2)
+
+    def test_ctrl_c_at_return_address_retry_quits(self):
+        self.server.return_address.side_effect = ServerError(404, "Not Found")
+        self.input.side_effect = KeyboardInterrupt
+        with self.assertLogs("ibp_printing.shippy", "ERROR"):
+            with self.assertRaises(SystemExit) as exited:
+                cli.main()
+
+        self.assertEqual(exited.exception.code, 130)
+        self.client.shipment.create.assert_not_called()
+
+
+class UnexpectedErrorTests(MainLoopCase):
+    """An error nothing else handles is logged, then shippy closes on Enter."""
+
+    def test_unexpected_error_is_logged_and_waits_for_enter(self):
+        self.ship_label.side_effect = RuntimeError("bug")
+        with self.assertLogs("ibp_printing.shippy", "ERROR") as logs:
+            with self.assertRaises(SystemExit) as exited:
+                cli.main()
+
+        self.assertEqual(exited.exception.code, 1)
+        self.assertIsInstance(logs.records[-1].exc_info[1], RuntimeError)
+        self.assertIn("shippy hit a problem it didn't expect", self.printed_text())
+        self.input.assert_called_once()
 
 
 class LoadConfigTests(unittest.TestCase):

@@ -156,6 +156,28 @@ startup quits shippy with exit status 130, so a launcher such as the kiosk's
 can tell it from a failure; before a purchase it cancels only that shipment,
 and no postage is bought. `--preview` skips this check.
 
+### When EasyPost or the IBP server fails
+
+A failure for one package (the IBP server can't be reached, or EasyPost
+fails or quotes no USPS rate) skips only that package: shippy says what went
+wrong, logs it, and asks for the next one. Before the purchase it says "No
+postage was bought. Try this package again." If the purchase itself failed
+without a clear answer from EasyPost (a timeout, a lost connection, a server
+error), the charge may have gone through, so it says "The purchase may not
+have completed. Try this package again; an unused label is refunded
+automatically." shippy doesn't check for or refund such a label itself. If
+EasyPost refuses the payment, it says "The EasyPost account can't pay for
+postage right now. Tell a coordinator; no postage was bought."
+
+If the return address (or, for bulk, the units list) can't be fetched or
+checked at startup, shippy waits: press Enter to try again, or Ctrl+C to
+quit (exit status 130). It says it can't reach the IBP server or EasyPost,
+or, when one of them turned the request down (e.g. EasyPost rejected the
+return address), gives the reason and asks for a coordinator. Any other
+error it didn't expect is logged, and shippy says "shippy hit a problem it
+didn't expect. The details are in <log folder>. Press Enter to close." before
+exiting with status 1.
+
 ### When a label does not print
 
 Unused labels are refunded automatically: a weekly job on the IBP server
