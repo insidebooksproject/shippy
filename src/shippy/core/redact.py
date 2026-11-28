@@ -3,12 +3,35 @@
 The stations copy ibp-printing's whole log directory (the printer logs and
 ``errors-<app>.jsonl``) to ``ibp-server``, so nothing written there may carry
 an API key, a config.ini line or an address a volunteer typed. Code that logs
-an exception whose text can hold one describes it with a helper here instead.
+an exception whose text can hold one describes it with a helper here instead;
+:func:`scrub_secrets` is the backstop that every record written to that
+directory goes through.
 """
 
 import configparser
+import re
 
 from pydantic import ValidationError
+
+REDACTED = "[redacted]"
+
+# Query parameters that carry a credential, e.g. the ``key=`` of every
+# Google Maps request URL (which a requests error repeats).
+_SECRET_PARAM = re.compile(
+    r"(?i)\b((?:api_?)?key|signature|client_secret|(?:access_)?token)="
+    r"[^&\s\"'\\<>]+"
+)
+# The query string of a Google Maps request also holds what was typed.
+_MAPS_QUERY = re.compile(r"(/maps/api/[^\s?\"'\\]*)\?[^\s\"'\\<>]+")
+# The shapes of the keys shippy holds, wherever they turn up.
+_KNOWN_KEYS = re.compile(r"\b(?:AIza[0-9A-Za-z_-]{30,}|EZ[AT]K[0-9A-Za-z]{16,})")
+
+
+def scrub_secrets(text: str) -> str:
+    """``text`` with API keys and Google Maps request queries redacted."""
+    text = _MAPS_QUERY.sub(rf"\1?{REDACTED}", text)
+    text = _SECRET_PARAM.sub(rf"\1={REDACTED}", text)
+    return _KNOWN_KEYS.sub(REDACTED, text)
 
 
 def describe_validation_error(error: ValidationError) -> str:

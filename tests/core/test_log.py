@@ -12,6 +12,7 @@ import pytest
 from shippy.core import log
 
 from ..log_files import read_jsonl
+from ..maps_errors import MAPS_KEY, leaks, transport_error
 
 # The real function, before the fixture below replaces it, without its cache.
 read_app_version = log.app_version.__wrapped__
@@ -186,3 +187,45 @@ def test_uncaught_exception_in_a_thread_is_logged_and_still_shown(app_log_dir):
         ("CRITICAL", "uncaught exception in thread worker-1")
     ]
     assert "ValueError: in a thread" in errors[0]["exc"]
+
+
+def test_keys_in_a_message_or_traceback_never_reach_the_uploaded_logs(app_log_dir):
+    """The backstop: e.g. a library's TransportError, logged with its traceback."""
+    sys.excepthook = mock.Mock()
+    log.start_logging(log.CLI_APP)
+    error = transport_error()
+
+    logging.getLogger("some.library").warning("request failed: %s", error)
+    log.get_logger("shippy.x").error("lookup failed", exc_info=_raise(error))
+    sys.excepthook(*_raise(error))
+
+    files = [
+        app_log_dir / name
+        for name in (
+            "errors-shippy.jsonl",
+            "printer-shippy.jsonl",
+            "printer-shippy.log",
+        )
+    ]
+    for path in files:
+        text = path.read_text("utf-8")
+        assert MAPS_KEY not in text and not leaks(text), path.name
+    errors = read_jsonl(files[0])  # Still valid JSON.
+    assert [e["msg"].split(":")[0] for e in errors] == [
+        "request failed",
+        "lookup failed",
+        "uncaught exception",
+    ]
+    assert "Max retries exceeded with url: /maps/api/geocode/json?" in errors[1]["exc"]
+    printer = read_jsonl(files[1])
+    assert [r["msg"] for r in printer if r["level"] == "ERROR"] == ["lookup failed"]
+
+
+def test_start_logging_twice_scrubs_once(app_log_dir):
+    log.start_logging(log.CLI_APP)
+    log.start_logging(log.CLI_APP)
+
+    logging.getLogger("x").error("key=s3cret")
+
+    errors = read_jsonl(app_log_dir / "errors-shippy.jsonl")
+    assert [e["msg"] for e in errors] == ["key=[redacted]"]

@@ -16,6 +16,7 @@ import functools
 import importlib.metadata
 import json
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -24,6 +25,8 @@ from typing import Optional
 import ibp_printing
 from ibp_printing import log as printing_log
 from ibp_printing.log import get_logger as _printing_logger
+
+from shippy.core.redact import scrub_secrets
 
 CLI_APP = "shippy"
 GUI_APP = "shippy-gui"
@@ -96,9 +99,12 @@ def start_logging(app: str) -> Path:
 
     The printer logs (:func:`configure_logging`), ``errors-<app>.jsonl`` with
     every WARNING and above from the whole process, and the uncaught-exception
-    hooks (:func:`install_exception_hooks`). The ``<app> starting`` line, at
-    INFO, goes to the printer logs (and shippy-gui's own log) with the
-    version, like the label watcher's. Safe to call more than once.
+    hooks (:func:`install_exception_hooks`). Every file it writes in the log
+    directory goes through :func:`shippy.core.redact.scrub_secrets`, since
+    the stations upload that directory. The ``<app> starting`` line, at INFO,
+    goes to the printer logs with the version, like the label watcher's
+    (shippy-gui's own log, set up later from config.ini, gets its own
+    ``Shippy GUI started`` line instead). Safe to call more than once.
 
     Returns:
         The log directory (printer logs and error log).
@@ -106,6 +112,7 @@ def start_logging(app: str) -> Path:
     version = app_version()
     log_dir = configure_logging(app)
     ibp_printing.configure_error_log(app, version=version, log_dir=log_dir)
+    scrub_log_dir(log_dir)
     install_exception_hooks()
     printing_log.log_event(
         get_logger("shippy.startup"),
@@ -119,6 +126,38 @@ def start_logging(app: str) -> Path:
         error_log=printing_log.error_log_file_name(app),
     )
     return log_dir
+
+
+class _ScrubbingFormatter(logging.Formatter):
+    """Another formatter's output, with :func:`scrub_secrets` applied."""
+
+    def __init__(self, inner: logging.Formatter):
+        super().__init__()
+        self.inner = inner
+
+    def format(self, record: logging.LogRecord) -> str:
+        return scrub_secrets(self.inner.format(record))
+
+
+def scrub_log_dir(log_dir: Path) -> None:
+    """Redact API keys from every log file ibp-printing writes in ``log_dir``.
+
+    The backstop for a message or traceback that repeats one (a Google Maps
+    request URL ends ``&key=...``): wraps the formatter of each file handler
+    there, on the root logger (the error log) and ibp-printing's (the
+    printer logs). Safe to call more than once.
+    """
+    directory = Path(os.path.abspath(log_dir))
+    for owner in (logging.getLogger(), logging.getLogger(printing_log.LOGGER_NAME)):
+        for handler in owner.handlers:
+            filename = getattr(handler, "baseFilename", None)
+            if (
+                filename
+                and Path(filename).parent == directory
+                and handler.formatter is not None
+                and not isinstance(handler.formatter, _ScrubbingFormatter)
+            ):
+                handler.setFormatter(_ScrubbingFormatter(handler.formatter))
 
 
 def install_exception_hooks() -> None:
