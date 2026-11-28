@@ -223,9 +223,12 @@ class ShipmentWorkflowTests(unittest.TestCase):
 
         warnings = []
         # Match the production error type contract closely enough for the warning branch.
-        with patch(
-            "shippy.gui.core.shipment_workflow.easypost.errors.InvalidRequestError",
-            Exception,
+        with (
+            patch(
+                "shippy.gui.core.shipment_workflow.easypost.errors.InvalidRequestError",
+                Exception,
+            ),
+            self.assertLogs("shippy.gui.core.shipment_workflow", "WARNING") as logs,
         ):
             result = self.workflow.prepare_label(
                 ShipmentWorkflowInput(
@@ -238,6 +241,12 @@ class ShipmentWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result.status, ShipmentWorkflowStatus.READY)
         self.assertEqual(len(warnings), 2)
+        # The return address is IBP's, logged like the CLI does; the
+        # recipient's is the volunteer's to check, not logged.
+        self.assertEqual(
+            [record.getMessage() for record in logs.records],
+            ["could not verify the return address from_123: bad"],
+        )
 
     def test_print_prepared_label_treats_unexpected_errors_as_uncertain(self):
         # R3: anything other than PrintError may have happened after the job
