@@ -12,7 +12,7 @@ from PIL import Image
 
 from .journal_fakes import install_fake_journal
 
-from shippy.gui.core import label_journal
+from shippy.core import label_journal
 from shippy.gui.core.models import RecipientAddress, ReturnAddressConfig
 from shippy.gui.core.services import PurchaseError
 from shippy.gui.core.shipment_workflow import (

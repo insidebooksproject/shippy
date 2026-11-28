@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
     QWidget,
 )
 
-from shippy.gui.core import label_journal
+from shippy.core import label_journal
 
 logger = logging.getLogger(__name__)
 

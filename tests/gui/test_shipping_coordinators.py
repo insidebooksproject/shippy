@@ -22,7 +22,7 @@ from shippy.gui.core.shipment_workflow import (
     ShipmentWorkflowResult,
     ShipmentWorkflowStatus,
 )
-from shippy.gui.core.label_journal import LabelIdentity
+from shippy.core.label_journal import LabelIdentity
 from shippy.gui.core.rates import RateSummary
 from shippy.gui.printing.printer_manager import DialogPrintStatus
 from shippy.gui.shipping_coordinators import (

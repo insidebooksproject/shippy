@@ -27,8 +27,8 @@ from ibp_printing.diagnostics import build_report
 from ibp_printing.log import get_logger
 from PIL import Image
 
-from . import console, labels, printer_gate, rates
-from shippy.core import postage
+from . import console, printer_gate, rates
+from shippy.core import label_journal, postage
 from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
 from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
@@ -348,11 +348,6 @@ def preview_image(img: Image.Image) -> None:
         input("(preview) press Enter to continue ... ")
 
 
-def shipment_ref(shipment) -> str:
-    """What a volunteer searches for in EasyPost: tracking code, else shipment id."""
-    return shipment.tracking_code or shipment.id
-
-
 def warn_if_job_not_ok(shipment, result: PrintResult, log_dir: pathlib.Path) -> None:
     """Tell the volunteer when the spooler could not confirm the label printed."""
     if result.outcome.ok:
@@ -361,7 +356,7 @@ def warn_if_job_not_ok(shipment, result: PrintResult, log_dir: pathlib.Path) -> 
     detail = OUTCOME_DETAILS.get(outcome, f"the printer queue reported '{outcome}'")
     logger.warning(
         "label %s sent to %r but its outcome is %s; it may not have printed",
-        shipment_ref(shipment),
+        label_journal.tracking_ref(shipment),
         result.printer_name,
         outcome,
     )
@@ -402,7 +397,7 @@ def request_refund_on_error(easypost_client, shipment):
     except Exception:
         with console.task_message("Requesting refund"):
             easypost_client.shipment.refund(shipment.id)
-        labels.update_status(shipment, labels.STATUS_REFUNDED)
+        label_journal.update_status(shipment, label_journal.STATUS_REFUNDED)
         raise
 
 
@@ -425,7 +420,11 @@ def check_printer_before_purchase() -> bool:
 
 def report_pending_labels() -> None:
     """One-line notice of labels that are bought but not printed yet."""
-    count = len(labels.pending_labels())
+    try:
+        count = len(label_journal.pending_labels())
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("could not list the labels waiting to print")
+        return
     if count:
         questionary.print(f"  {count} label(s) waiting to print", style=WARNING_STYLE)
 
@@ -468,7 +467,9 @@ def save_unprinted_label(
     # caller's refund context, so a console failure after a successful save
     # would refund a label that is already queued to print.
     try:
-        return save_for_retry(image, name=shipment_ref(shipment), meta=meta)
+        return save_for_retry(
+            image, name=label_journal.tracking_ref(shipment), meta=meta
+        )
     except Exception as exc:
         questionary.print(
             f"  The label did NOT print ({error}) and could not be saved to print "
@@ -483,18 +484,21 @@ def report_saved_label(
     path: pathlib.Path,
     error: PrintError,
     log_dir: pathlib.Path,
-    identity: labels.LabelIdentity | None = None,
+    identity: label_journal.LabelIdentity | None = None,
 ) -> None:
     """Tell the volunteer the label was saved and will print by itself."""
     logger.warning(
-        "label %s did not print (%s); saved to %s", shipment_ref(shipment), error, path
+        "label %s did not print (%s); saved to %s",
+        label_journal.tracking_ref(shipment),
+        error,
+        path,
     )
     recipient = identity.recipient_label if identity else "this recipient"
     questionary.print(
         "  The label didn't print. It was saved and will print automatically "
         "when the printer is working.\n"
         f"  Recipient: {recipient}\n"
-        f"  Tracking:  {shipment_ref(shipment)}\n"
+        f"  Tracking:  {label_journal.tracking_ref(shipment)}\n"
         f"  Printer logs: {log_dir}",
         style=WARNING_STYLE,
     )
@@ -774,7 +778,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
     gone through: an unused label is refunded by the weekly job.
     """
     to_addr_dict, weight, small_box, reference = package
-    identity = labels.identity_for(to_addr_dict)
+    identity = label_journal.identity_for(to_addr_dict)
 
     try:
         to_addr = postage.build_address(easypost_client, **to_addr_dict)
@@ -804,7 +808,7 @@ def ship_one(  # pylint: disable=too-many-arguments,too-many-locals
         report_shipping_error(exc, reference, maybe_bought=False)
         return
 
-    record = labels.record_purchase(identity, shipment)
+    record = label_journal.record_purchase(identity, shipment, app=CLI_APP)
 
     ship_label(
         easypost_client,
@@ -894,7 +898,7 @@ def ship_label(  # pylint: disable=too-many-arguments
     preview: bool,
     log_dir: pathlib.Path,
     *,
-    journal: tuple[labels.LabelIdentity | None, object] = (None, None),
+    journal: tuple[label_journal.LabelIdentity | None, object] = (None, None),
 ) -> None:
     """Turn a bought shipment into a printed (or saved) label.
 
@@ -921,23 +925,27 @@ def ship_label(  # pylint: disable=too-many-arguments
         # The label definitely reached no printer. Keep the postage and queue
         # the label for the label watcher; refund only if the label cannot even
         # be saved (save_unprinted_label re-raises).
-        meta = labels.retry_meta(identity, shipment, record)
+        meta = label_journal.retry_meta(identity, shipment, record, app=CLI_APP)
         with request_refund_on_error(easypost_client, shipment):
             path = save_unprinted_label(shipment, image, error, meta)
-        labels.update_status(shipment, labels.STATUS_QUEUED, file=path)
+        label_journal.update_status(shipment, label_journal.STATUS_QUEUED, file=path)
         report_saved_label(shipment, path, error, log_dir, identity)
         return
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # Not a PrintError: we can't tell whether the job reached the spooler,
         # so treat it as uncertain (no refund, no automatic retry).
-        labels.update_status(shipment, labels.STATUS_CHECK_PRINTER)
+        label_journal.update_status(shipment, label_journal.STATUS_CHECK_PRINTER)
         warn_print_raised(shipment, exc, log_dir)
         return
 
     # The job was spooled, so the label may well have printed. Refunding here
     # could leave a printed label with no postage.
-    labels.update_status(
+    label_journal.update_status(
         shipment,
-        labels.STATUS_PRINTED if result.outcome.ok else labels.STATUS_CHECK_PRINTER,
+        (
+            label_journal.STATUS_PRINTED
+            if result.outcome.ok
+            else label_journal.STATUS_CHECK_PRINTER
+        ),
     )
     warn_if_job_not_ok(shipment, result, log_dir)

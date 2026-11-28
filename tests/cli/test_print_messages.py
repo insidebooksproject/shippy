@@ -6,11 +6,12 @@ from unittest import mock
 
 import pytest
 
-from shippy.cli import app as cli, labels
+from shippy.cli import app as cli
+from shippy.core import label_journal
 
 LOG_DIR = pathlib.Path("logs")
 SHIPMENT = SimpleNamespace(id="shp_1", tracking_code="9400111")
-IDENTITY = labels.LabelIdentity(
+IDENTITY = label_journal.LabelIdentity(
     recipient_key="key", recipient_label="Jane Doe, 1 Unit Rd, Kenedy, TX"
 )
 
@@ -57,7 +58,7 @@ def test_saved_label_notice_without_identity(printed):
 
 def test_pending_count_is_a_plain_line(printed):
     """Labels waiting to print are counted on one line, without a banner."""
-    with mock.patch.object(cli.labels, "pending_labels", return_value=[1, 2]):
+    with mock.patch.object(cli.label_journal, "pending_labels", return_value=[1, 2]):
         cli.report_pending_labels()
     printed.assert_called_once_with(
         "  2 label(s) waiting to print", style=cli.WARNING_STYLE
@@ -66,7 +67,7 @@ def test_pending_count_is_a_plain_line(printed):
 
 def test_no_pending_labels_prints_nothing(printed):
     """Nothing is shown when no label is waiting."""
-    with mock.patch.object(cli.labels, "pending_labels", return_value=[]):
+    with mock.patch.object(cli.label_journal, "pending_labels", return_value=[]):
         cli.report_pending_labels()
     printed.assert_not_called()
 
@@ -110,3 +111,12 @@ def test_advice_wording():
         "Check the printer. If no label came out, create it again; the unused one "
         "is refunded automatically."
     )
+
+
+def test_unreadable_journal_prints_nothing(printed):
+    """A journal problem never stops shipping; it is only logged."""
+    with mock.patch.object(
+        cli.label_journal, "pending_labels", side_effect=OSError("locked")
+    ):
+        cli.report_pending_labels()
+    assert not printed.call_args_list

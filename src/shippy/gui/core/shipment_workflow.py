@@ -11,7 +11,8 @@ import easypost  # type: ignore[import-not-found] # pylint: disable=import-error
 import ibp_printing
 from PIL import Image
 
-from shippy.gui.core import label_journal
+from shippy.core import label_journal
+from shippy.core.log import GUI_APP
 from shippy.gui.core.constants import (
     PRINT_JOB_NAME,
 )
@@ -131,7 +132,9 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
                     "Failed to verify recipient address. Please double-check before shipping."
                 )
 
-            identity = label_journal.identity_for(workflow_input.to_address)
+            identity = label_journal.identity_for(
+                workflow_input.to_address.model_dump()
+            )
 
             progress("Purchasing postage...")
             weight_oz = workflow_input.weight_lbs * OUNCES_PER_POUND
@@ -141,7 +144,7 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
                 weight_oz,
                 small_box=workflow_input.small_box,
             )
-            record = label_journal.record_purchase(identity, shipment)
+            record = label_journal.record_purchase(identity, shipment, app=GUI_APP)
             rate_summary = self._summarize_rates(shipment, workflow_input, warning)
 
             progress("Downloading label...")
@@ -270,7 +273,7 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
             warning = print_raised_warning(printer_name, error)
             return ShipmentWorkflowResult(
                 status=ShipmentWorkflowStatus.SUCCESS,
-                message=f"{warning} Tracking: {_shipment_ref(shipment)}",
+                message=f"{warning} Tracking: {label_journal.tracking_ref(shipment)}",
                 shipment=shipment,
                 image=image,
                 print_warning=warning,
@@ -311,13 +314,15 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
     ) -> ShipmentWorkflowResult:
         """Save an unprinted label to the print queue; refund only if that fails."""
         progress = on_progress or (lambda _message: None)
-        tracking = _shipment_ref(shipment)
+        tracking = label_journal.tracking_ref(shipment)
         try:
             progress("Saving label to print later...")
             path = ibp_printing.save_for_retry(
                 image,
                 name=tracking,
-                meta=label_journal.retry_meta(identity, shipment, label_record),
+                meta=label_journal.retry_meta(
+                    identity, shipment, label_record, app=GUI_APP
+                ),
             )
         except Exception as save_error:  # pylint: disable=broad-exception-caught
             logger.exception("Could not save unprinted label %s", tracking)
@@ -381,11 +386,6 @@ def _is_payment_error(error: Exception) -> bool:
         isinstance(error, easypost.errors.PaymentError)
         or getattr(error, "http_status", None) == 402
     )
-
-
-def _shipment_ref(shipment: Any) -> str:
-    """What a volunteer searches for in EasyPost: tracking code, else id."""
-    return shipment.tracking_code or shipment.id
 
 
 def saved_label_message(print_error: Exception, path: Path) -> str:

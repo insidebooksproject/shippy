@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
-from shippy.gui.core import label_journal
+from shippy.core import label_journal
 from shippy.gui.core.models import RecipientAddress
 from shippy.gui.widgets.label_queue import (
     PendingLabelsDialog,
@@ -43,7 +43,7 @@ class LabelJournalHelperTests(unittest.TestCase):
                 city="Gatesville",
                 state="TX",
                 zipcode="76528",
-            )
+            ).model_dump()
         )
         self.assertEqual(
             identity.recipient_key,
