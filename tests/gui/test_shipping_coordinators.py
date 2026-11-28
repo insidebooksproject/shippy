@@ -9,12 +9,12 @@ from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 from .journal_fakes import install_fake_journal, make_record
 
+from shippy.core.addresses import ParsedAddress
 from shippy.gui.core.constants import STATUS_COLORS
 from shippy.gui.core.models import (
     Config,
     EasypostConfig,
     GoogleMapsConfig,
-    ParsedAddress,
     RecipientAddress,
     IbpConfig,
 )

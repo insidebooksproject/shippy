@@ -1,13 +1,38 @@
-"""Address lookup and parsing with Google Maps."""
+"""Address lookup and parsing with Google Maps, for both apps' typed addresses.
 
-import logging
+The CLI's ``manual`` mode and shippy-gui both turn the address a volunteer
+picked (or typed) into street, city, state and ZIP fields here.
+"""
+
 from typing import Any, Optional
 
 import googlemaps  # type: ignore[import-not-found] # pylint: disable=import-error
+from pydantic import BaseModel
 
-from shippy.gui.core.models import AutocompletePrediction, ParsedAddress
+from shippy.core.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+
+class ParsedAddress(BaseModel):
+    """Model for address parsed from external service (fields optional)."""
+
+    street1: Optional[str] = None
+    street2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zipcode: Optional[str] = None
+    country: Optional[str] = None
+
+
+class AutocompletePrediction(BaseModel):
+    """Structured Google autocomplete prediction used for follow-up lookup."""
+
+    description: str
+    place_id: Optional[str] = None
+    # Retained for future UI refinements even though the current flow only needs place_id.
+    structured_formatting: Optional[dict[str, Any]] = None
+    types: list[str] = []
 
 
 class GoogleAddressLookup:  # pylint: disable=too-few-public-methods

@@ -7,9 +7,10 @@ import googlemaps  # type: ignore
 import questionary
 from prompt_toolkit.completion import ThreadedCompleter
 
-from .addresses import AddressParser
-from .autocompletion import GoogleMapsCompleter
+from shippy.core.addresses import AddressParser
 from shippy.core.ibp_server import JURISDICTIONS
+
+from .autocompletion import GoogleMapsCompleter
 
 
 def query_unit(units: typing.Mapping[str, typing.Any]) -> typing.Optional[str]:
@@ -163,8 +164,15 @@ def query_address(gmaps: googlemaps.Client) -> typing.Optional[typing.Dict[str, 
         return None
 
     parse_address = AddressParser(gmaps)
-    address = parse_address(address_text)
+    parsed = parse_address(address_text)
+    if parsed is None:
+        questionary.print(
+            "  Google Maps couldn't find that address. Enter it again.",
+            style="fg:red",
+        )
+        return None
 
+    address = parsed.model_dump(exclude_none=True)
     address["name"] = name
     address["company"] = company
 

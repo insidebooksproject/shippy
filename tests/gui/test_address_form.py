@@ -1,6 +1,7 @@
-"""Unit tests for the address form's "new package" signal."""
+"""Unit tests for the address form."""
 
 import unittest
+from unittest.mock import Mock
 
 from PySide6.QtWidgets import QApplication
 
@@ -44,6 +45,41 @@ class AddressReplacedSignalTests(unittest.TestCase):
             self.emitted.clear()
             field.textEdited.emit("x")
             self.assertEqual(self.emitted, [True], field.objectName())
+
+
+class AddressFormTests(unittest.TestCase):
+    """Tests for non-destructive address form behavior."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.form = AddressForm()
+
+    def test_merge_address_preserves_existing_values(self):
+        self.form.name_input.setText("Jane Doe")
+        self.form.street2_input.setText("Unit 42")
+
+        self.form.merge_address({"street1": "123 Prison Rd", "city": "Huntsville"})
+
+        self.assertEqual(self.form.name_input.text(), "Jane Doe")
+        self.assertEqual(self.form.street2_input.text(), "Unit 42")
+        self.assertEqual(self.form.street1_input.text(), "123 Prison Rd")
+        self.assertEqual(self.form.city_input.text(), "Huntsville")
+
+    def test_merge_address_not_called_when_parser_returns_none(self):
+        parser = Mock(return_value=None)
+        self.form.name_input.setText("Jane Doe")
+        self.form.street2_input.setText("Unit 42")
+
+        parsed = parser("unparseable address")
+        if parsed:
+            self.form.merge_address(parsed)
+
+        parser.assert_called_once_with("unparseable address")
+        self.assertEqual(self.form.name_input.text(), "Jane Doe")
+        self.assertEqual(self.form.street2_input.text(), "Unit 42")
 
 
 if __name__ == "__main__":

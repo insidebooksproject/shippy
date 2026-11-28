@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 from PySide6.QtCore import Qt, Signal  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
 from shippy.core.misc import LOGO_PATH
-from shippy.gui.core.addresses import AddressParser
+from shippy.core.addresses import AddressParser
 from shippy.gui.core.config_manager import ConfigManager
 from shippy.gui.core.services import ShipmentService
 from shippy.gui.shipping_coordinators import (

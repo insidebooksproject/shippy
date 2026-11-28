@@ -8,7 +8,7 @@ from PySide6.QtCore import QStringListModel, Qt, QThread, QTimer, Signal  # type
 from PySide6.QtWidgets import QCompleter, QLineEdit  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
 from shippy.gui.core.constants import LOOKUP_SHUTDOWN_WAIT_MS
-from shippy.gui.core.models import AutocompletePrediction
+from shippy.core.addresses import AutocompletePrediction
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """Pydantic models for configuration checking."""
 
-from typing import Any, Optional
+from typing import Optional
 from pydantic import BaseModel, field_validator
 
 from shippy.core import models as core_models
@@ -73,27 +73,6 @@ class ReturnAddressConfig(AddressBase):
 
 class RecipientAddress(AddressBase):
     """Model for recipient address."""
-
-
-class ParsedAddress(BaseModel):
-    """Model for address parsed from external service (fields optional)."""
-
-    street1: Optional[str] = None
-    street2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zipcode: Optional[str] = None
-    country: Optional[str] = None
-
-
-class AutocompletePrediction(BaseModel):
-    """Structured Google autocomplete prediction used for follow-up lookup."""
-
-    description: str
-    place_id: Optional[str] = None
-    # Retained for future UI refinements even though the current flow only needs place_id.
-    structured_formatting: Optional[dict[str, Any]] = None
-    types: list[str] = []
 
 
 # The [parcel] and [ibp] sections are read exactly as the shippy CLI reads them.

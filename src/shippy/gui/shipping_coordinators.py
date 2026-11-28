@@ -16,9 +16,9 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 
 from shippy.core import label_journal
-from shippy.gui.core.addresses import AddressParser
+from shippy.core.addresses import AddressParser, AutocompletePrediction
 from shippy.gui.core.constants import SHIPMENT_SHUTDOWN_WAIT_MS, STATUS_COLORS
-from shippy.gui.core.models import AutocompletePrediction, Config
+from shippy.gui.core.models import Config
 from shippy.gui.core.rates import RateSummary
 from shippy.gui.core.services import ShipmentService
 from shippy.gui.core.shipment_workflow import (
