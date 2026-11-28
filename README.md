@@ -293,6 +293,10 @@ label is for, its tracking number, its status and when it was queued.
 ## Label printers
 
 Printing is handled by `ibp-printing`, and only USB label printers are used.
+Postage never goes to a printer ibp-printing knows is for package labels (an
+SP310 or a DYMO LabelWriter 450): neither app lists or counts one, so with
+only such a printer plugged in, both show their no-printer prompt before
+buying.
 A supported printer (the PM2411BT the shipping laptops use) is printed to
 directly over USB, with no print queue or naming rule, and is tried first
 (shippy-gui lists it first, e.g. `PM2411BT (USB direct, serial ...)`). On

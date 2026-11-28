@@ -23,7 +23,7 @@ class ShipmentControlsTests(unittest.TestCase):
     ):
         mock_get_available_printers.side_effect = [
             [
-                PrinterInfo("Alpha 20d1:7008"),
+                PrinterInfo("Alpha 2e3c:5760"),
                 PrinterInfo(
                     "Beta 9999:0001",
                     is_default=True,
@@ -32,24 +32,24 @@ class ShipmentControlsTests(unittest.TestCase):
                 ),
             ],
             [
-                PrinterInfo("Alpha 20d1:7008"),
+                PrinterInfo("Alpha 2e3c:5760"),
                 PrinterInfo("Gamma 7777:3333"),
             ],
         ]
 
         controls = ShipmentControls()
-        controls.printer_combo.setCurrentText("Alpha 20d1:7008")
+        controls.printer_combo.setCurrentText("Alpha 2e3c:5760")
 
         controls.refresh_printers()
 
-        self.assertEqual(controls.printer_name, "Alpha 20d1:7008")
+        self.assertEqual(controls.printer_name, "Alpha 2e3c:5760")
 
     @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_refresh_falls_back_to_default_then_first_available(
         self, mock_get_available_printers
     ):
         mock_get_available_printers.side_effect = [
-            [PrinterInfo("Alpha 20d1:7008", is_default=True)],
+            [PrinterInfo("Alpha 2e3c:5760", is_default=True)],
             [
                 PrinterInfo("Beta 9999:0001", is_default=True),
                 PrinterInfo("Gamma 7777:3333"),
@@ -101,7 +101,7 @@ class ShipmentControlsTests(unittest.TestCase):
 
     @patch("shippy.gui.widgets.shipment_controls.get_available_printers")
     def test_tooltips_explain_refresh_and_filtering(self, mock_get_available_printers):
-        mock_get_available_printers.return_value = [PrinterInfo("Alpha 20d1:7008")]
+        mock_get_available_printers.return_value = [PrinterInfo("Alpha 2e3c:5760")]
 
         controls = ShipmentControls()
 
@@ -109,8 +109,8 @@ class ShipmentControlsTests(unittest.TestCase):
         self.assertIn("updates by itself", controls.printer_combo.toolTip())
         self.assertIn("scan again", controls.refresh_button.toolTip())
         self.assertIn("do not need to restart", controls.refresh_button.toolTip())
-        self.assertEqual(controls.selected_printer.system_name, "Alpha 20d1:7008")
-        self.assertIn("Alpha 20d1:7008", controls.printer_status_label.text())
+        self.assertEqual(controls.selected_printer.system_name, "Alpha 2e3c:5760")
+        self.assertIn("Alpha 2e3c:5760", controls.printer_status_label.text())
 
 
 class PrinterPollingTests(unittest.TestCase):
@@ -130,7 +130,7 @@ class PrinterPollingTests(unittest.TestCase):
             time.sleep(0.01)
 
     def test_poll_picks_up_a_printer_plugged_in_later(self):
-        scans = [[], [PrinterInfo("Alpha 20d1:7008")]]
+        scans = [[], [PrinterInfo("Alpha 2e3c:5760")]]
         controls = ShipmentControls(discover=lambda: scans.pop(0))
         updates = []
         controls.printers_updated.connect(lambda: updates.append(controls.has_printers))
@@ -140,14 +140,14 @@ class PrinterPollingTests(unittest.TestCase):
         self._wait_for_poll(controls)
 
         self.assertTrue(controls.has_printers)
-        self.assertEqual(controls.printer_name, "Alpha 20d1:7008")
+        self.assertEqual(controls.printer_name, "Alpha 2e3c:5760")
         self.assertIn(
             ShipmentControls.PRINTER_READY_TEXT, controls.printer_status_label.text()
         )
         self.assertEqual(updates, [True])
 
     def test_poll_notices_a_printer_unplugged(self):
-        scans = [[PrinterInfo("Alpha 20d1:7008")], []]
+        scans = [[PrinterInfo("Alpha 2e3c:5760")], []]
         controls = ShipmentControls(discover=lambda: scans.pop(0))
 
         controls.poll_printers()
@@ -163,7 +163,7 @@ class PrinterPollingTests(unittest.TestCase):
 
         def discover():
             calls.append(1)
-            return [PrinterInfo("Alpha 20d1:7008")]
+            return [PrinterInfo("Alpha 2e3c:5760")]
 
         controls = ShipmentControls(discover=discover)
         calls.clear()
@@ -179,7 +179,7 @@ class PrinterPollingTests(unittest.TestCase):
             if discover.calls:
                 raise RuntimeError("WMI hiccup")
             discover.calls += 1
-            return [PrinterInfo("Alpha 20d1:7008")]
+            return [PrinterInfo("Alpha 2e3c:5760")]
 
         discover.calls = 0
         controls = ShipmentControls(discover=discover)
@@ -191,7 +191,7 @@ class PrinterPollingTests(unittest.TestCase):
         self.assertTrue(controls.has_printers)
 
     def test_unchanged_scan_does_not_rebuild_the_list(self):
-        printers = [PrinterInfo("Alpha 20d1:7008"), PrinterInfo("Beta 9999:0001")]
+        printers = [PrinterInfo("Alpha 2e3c:5760"), PrinterInfo("Beta 9999:0001")]
         controls = ShipmentControls(discover=lambda: list(printers))
         controls.printer_combo.setCurrentIndex(1)
         cleared = []
@@ -203,7 +203,7 @@ class PrinterPollingTests(unittest.TestCase):
         self.assertEqual(controls.printer_name, "Beta 9999:0001")
 
     def test_poll_rate_slows_once_a_printer_is_found(self):
-        scans = [[], [PrinterInfo("Alpha 20d1:7008")], []]
+        scans = [[], [PrinterInfo("Alpha 2e3c:5760")], []]
         controls = ShipmentControls(
             discover=lambda: scans.pop(0),
             poll_interval_ms=2_000,
@@ -221,7 +221,7 @@ class PrinterPollingTests(unittest.TestCase):
         self.assertEqual(timer.interval(), 2_000)
 
     def test_printer_found_and_lost_are_logged(self):
-        scans = [[], [PrinterInfo("Alpha 20d1:7008")], []]
+        scans = [[], [PrinterInfo("Alpha 2e3c:5760")], []]
         logger_name = "shippy.gui.widgets.shipment_controls"
         with self.assertLogs(logger_name, "INFO") as logs:
             controls = ShipmentControls(discover=lambda: scans.pop(0))
@@ -234,13 +234,13 @@ class PrinterPollingTests(unittest.TestCase):
             messages,
             [
                 "no label printer found at start-up",
-                "label printer found: Alpha 20d1:7008",
-                "label printer lost (was Alpha 20d1:7008)",
+                "label printer found: Alpha 2e3c:5760",
+                "label printer lost (was Alpha 2e3c:5760)",
             ],
         )
 
     def test_unchanged_poll_logs_nothing(self):
-        printers = [PrinterInfo("Alpha 20d1:7008")]
+        printers = [PrinterInfo("Alpha 2e3c:5760")]
         controls = ShipmentControls(discover=lambda: list(printers))
         with self.assertNoLogs("shippy.gui.widgets.shipment_controls", "INFO"):
             controls.poll_printers()
@@ -254,7 +254,7 @@ class PrinterPollingTests(unittest.TestCase):
         def scan():
             # pylint: disable-next=protected-access
             quiet_flags.append(ibp_printing.log._QUIET.get())
-            return [PrinterInfo("Alpha 20d1:7008")]
+            return [PrinterInfo("Alpha 2e3c:5760")]
 
         controls = ShipmentControls(discover=scan)
         controls.poll_printers()
@@ -266,7 +266,7 @@ class PrinterPollingTests(unittest.TestCase):
 
 @patch(
     "shippy.gui.widgets.shipment_controls.get_available_printers",
-    return_value=[PrinterInfo("Alpha 20d1:7008")],
+    return_value=[PrinterInfo("Alpha 2e3c:5760")],
 )
 class SmallBoxQuestionTests(unittest.TestCase):
     """The "box is 12x12x12 or smaller" question next to the weight."""

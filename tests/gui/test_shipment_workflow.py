@@ -523,14 +523,14 @@ class ShipmentWorkflowTests(unittest.TestCase):
             image=Image.new("RGB", (10, 10), "white"),
         )
         print_result = ibp_printing.PrintResult(
-            "Alpha 20d1:7008", "Shipping Label", outcome=ibp_printing.JobOutcome.ERROR
+            "Alpha 2e3c:5760", "Shipping Label", outcome=ibp_printing.JobOutcome.ERROR
         )
 
         with patch(
             "shippy.gui.core.shipment_workflow.print_image", return_value=print_result
         ):
             result = self.workflow.print_prepared_label(
-                prepared_result, "Alpha 20d1:7008"
+                prepared_result, "Alpha 2e3c:5760"
             )
 
         self.assertEqual(result.status, ShipmentWorkflowStatus.SUCCESS)
@@ -540,7 +540,7 @@ class ShipmentWorkflowTests(unittest.TestCase):
         self.assertIn("may not have printed", result.message)
         self.assertIn(CHECK_PRINTER_ADVICE, result.message)
         self.assertIn("'error'", result.message)
-        self.assertIn("Alpha 20d1:7008", result.message)
+        self.assertIn("Alpha 2e3c:5760", result.message)
         self.assertIn("TRACK123", result.message)
         self.assertIn(str(ibp_printing.default_log_dir()), result.message)
         self.assertEqual(self.journal.statuses(), ["check_printer"])

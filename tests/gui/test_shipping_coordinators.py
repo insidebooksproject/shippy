@@ -150,7 +150,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_controls = Mock(spec=ShipmentControls)
         shipment_controls.validate.return_value = None
         shipment_controls.weight_lbs = 2
-        shipment_controls.printer_name = "Alpha 20d1:7008"
+        shipment_controls.printer_name = "Alpha 2e3c:5760"
         status_label = QLabel()
         presenter = ShippingStatusPresenter(status_label)
         config = Config(
@@ -214,7 +214,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_controls.validate.return_value = None
         shipment_controls.weight_lbs = 8
         shipment_controls.small_box = True
-        shipment_controls.printer_name = "Alpha 20d1:7008"
+        shipment_controls.printer_name = "Alpha 2e3c:5760"
         status_label = QLabel()
         presenter = ShippingStatusPresenter(status_label)
         config = Config(
@@ -304,7 +304,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_controls = Mock(spec=ShipmentControls)
         shipment_controls.validate.return_value = None
         shipment_controls.weight_lbs = 2
-        shipment_controls.printer_name = "Alpha 20d1:7008"
+        shipment_controls.printer_name = "Alpha 2e3c:5760"
         status_label = QLabel()
         created_workers: list[FakeWorker] = []
 
@@ -355,7 +355,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_controls = Mock(spec=ShipmentControls)
         shipment_controls.validate.return_value = None
         shipment_controls.weight_lbs = 2
-        shipment_controls.printer_name = "Alpha 20d1:7008"
+        shipment_controls.printer_name = "Alpha 2e3c:5760"
         status_label = QLabel()
         created_workers: list[FakeWorker] = []
 
@@ -418,7 +418,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_controls = Mock(spec=ShipmentControls)
         shipment_controls.validate.return_value = None
         shipment_controls.weight_lbs = 2
-        shipment_controls.printer_name = "Alpha 20d1:7008"
+        shipment_controls.printer_name = "Alpha 2e3c:5760"
         status_label = QLabel()
         workers: list[FakeWorker] = []
         done = Mock()
@@ -501,7 +501,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_service = Mock()
         coordinator, status_label, shipment = self._dialog_coordinator(shipment_service)
 
-        coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
+        coordinator._on_label_ready(object(), "Alpha 2e3c:5760", shipment)
 
         shipment_service.refund_shipment.assert_called_once_with("shp_123")
         self.assertEqual(status_label.text(), "Print canceled. Refunded.")
@@ -518,7 +518,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         coordinator, status_label, shipment = self._dialog_coordinator(shipment_service)
 
         with self.assertLogs("shippy.gui.shipping_coordinators", "ERROR"):
-            coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
+            coordinator._on_label_ready(object(), "Alpha 2e3c:5760", shipment)
 
         self.assertEqual(
             status_label.text(),
@@ -546,7 +546,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
             identity=LabelIdentity("key", "Jane Doe, Huntsville"),
         )
 
-        coordinator._on_label_ready(image, "Alpha 20d1:7008", shipment, prepared)
+        coordinator._on_label_ready(image, "Alpha 2e3c:5760", shipment, prepared)
 
         mock_save.assert_called_once_with(image, name="TRACK123", meta=ANY)
         meta = mock_save.call_args.kwargs["meta"]
@@ -578,7 +578,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         )
 
         with self.assertLogs("shippy.gui.core.shipment_workflow", "ERROR"):
-            coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
+            coordinator._on_label_ready(object(), "Alpha 2e3c:5760", shipment)
 
         shipment_service.refund_shipment.assert_called_once_with("shp_123")
         mock_box.critical.assert_called_once()
@@ -594,7 +594,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         shipment_service = Mock()
         coordinator, status_label, shipment = self._dialog_coordinator(shipment_service)
 
-        coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
+        coordinator._on_label_ready(object(), "Alpha 2e3c:5760", shipment)
 
         shipment_service.refund_shipment.assert_not_called()
         mock_save.assert_not_called()
@@ -614,7 +614,7 @@ class ShippingCoordinatorTests(unittest.TestCase):
         mock_print_dialog.return_value = DialogPrintStatus.PRINTED
         coordinator, _status_label, shipment = self._dialog_coordinator(Mock())
 
-        coordinator._on_label_ready(object(), "Alpha 20d1:7008", shipment)
+        coordinator._on_label_ready(object(), "Alpha 2e3c:5760", shipment)
 
         self.assertEqual(self.journal.status_updates, [("TRACK123", "printed", None)])
 

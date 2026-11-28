@@ -17,6 +17,7 @@ from PySide6.QtGui import QPainter  # type: ignore[import-untyped] # pylint: dis
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QWidget  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
 
+from shippy.core.printers import shipping_printers
 from shippy.gui.core.constants import PRINT_JOB_NAME, PRINT_TRACK_TIMEOUT_S
 from shippy.gui.printing.models import PrinterInfo
 
@@ -41,17 +42,20 @@ class DialogPrintStatus(str, Enum):
 
 
 def get_available_printers() -> list[PrinterInfo]:
-    """Get usable label printers, best first.
+    """Get usable shipping-label printers, best first.
 
     Direct USB printers come first; on Windows these are followed by queues
     whose name ends in a USB ``VID:PID`` suffix and whose USB device is
-    present. Linux has no queues.
+    present. Linux has no queues. Known package-label printers (an SP310, a
+    DYMO LabelWriter 450) are left out (``shipping_printers``), so they are
+    never offered, and with only one of them plugged in the no-printer check
+    before buying waits as if there were none.
 
     Returns:
         List of discovered printers. Empty list if none are found or on error.
     """
     try:
-        candidates = ibp_printing.discover().usable
+        candidates = shipping_printers(ibp_printing.discover().usable)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.exception("Printer discovery failed")
         return []

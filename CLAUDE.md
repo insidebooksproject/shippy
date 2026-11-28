@@ -39,6 +39,7 @@ src/shippy/
     log.py               # app names (journal app=, printer-<app> logs), printer log setup
     models.py            # config models: [ibp], [easypost], [googlemaps], [parcel]
     postage.py           # EasyPost address fields, shipment quote/buy, references
+    printers.py          # which printers postage may go to (no package-label printers)
     purchase.py          # buy-failure outcomes, refusal rules, shared volunteer advice
     rates.py             # USPS service names and quoted prices
     assets/logo.jpg
@@ -176,7 +177,7 @@ or startup code. If you cannot run a meaningful check, say so.
   app-specific flow (questionary prompts, Qt widgets and workers, each app's
   own wording around the shared messages) in its app. Never hardcode secrets,
   API keys, printer names or machine-specific paths.
-- Printing (discovery, platform backends, USB VID:PID matching, job tracking, printer logs) lives in the shared `ibp-printing` library (`ibp_printing`). The CLI calls it directly; `gui/printing/printer_manager.py` is only a thin adapter. Fix printer behaviour in ibp-printing, not here, and do not add platform checks to the apps.
+- Printing (discovery, platform backends, USB VID:PID matching, job tracking, printer logs) lives in the shared `ibp-printing` library (`ibp_printing`). The CLI calls it directly; `gui/printing/printer_manager.py` is only a thin adapter. Both apps offer, count and print to shipping-label printers only (`core/printers.shipping_printers`, ibp-printing's registry: known package-label printers are left out, unknown ones still count; the CLI prints with `label="shipping"`). Fix printer behaviour in ibp-printing, not here, and do not add platform checks to the apps.
 - Logging: shared code logs with `shippy.core.log.get_logger(__name__)`, under
   ibp-printing's logger, so its records reach the running app's printer logs
   (the CLI has no other log file); shippy-gui also adds its own rotating log

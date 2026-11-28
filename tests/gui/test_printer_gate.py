@@ -38,7 +38,7 @@ class NoPrinterDialogTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_returns_at_once_when_a_printer_is_ready(self):
-        controls = ShipmentControls(discover=lambda: [PrinterInfo("Alpha 20d1:7008")])
+        controls = ShipmentControls(discover=lambda: [PrinterInfo("Alpha 2e3c:5760")])
 
         with patch("shippy.gui.widgets.printer_gate.NoPrinterDialog") as dialog:
             self.assertIs(
@@ -47,7 +47,7 @@ class NoPrinterDialogTests(unittest.TestCase):
         dialog.assert_not_called()
 
     def test_closes_by_itself_when_a_printer_is_plugged_in(self):
-        scans = [[], [PrinterInfo("Alpha 20d1:7008")]]
+        scans = [[], [PrinterInfo("Alpha 2e3c:5760")]]
         controls = ShipmentControls(discover=lambda: scans.pop(0))
         # Plug the printer in once the dialog is up; the next scan finds it.
         QTimer.singleShot(0, controls.refresh_printers)
@@ -55,7 +55,7 @@ class NoPrinterDialogTests(unittest.TestCase):
         result = wait_for_printer(None, controls)
 
         self.assertIs(result, PrinterGateResult.PRINTER_FOUND)
-        self.assertEqual(controls.printer_name, "Alpha 20d1:7008")
+        self.assertEqual(controls.printer_name, "Alpha 2e3c:5760")
 
     def test_continue_anyway(self):
         controls = ShipmentControls(discover=lambda: [])
@@ -183,12 +183,12 @@ class ShipmentFlowPrinterGateTests(unittest.TestCase):
 
     def test_printer_found_prints_to_it(self, _modifiers):
         coordinator = self._coordinator(
-            PrinterGateResult.PRINTER_FOUND, printer_name="Alpha 20d1:7008"
+            PrinterGateResult.PRINTER_FOUND, printer_name="Alpha 2e3c:5760"
         )
 
         coordinator.create_label()
 
-        self.assertEqual(self.workers[0].kwargs["printer_name"], "Alpha 20d1:7008")
+        self.assertEqual(self.workers[0].kwargs["printer_name"], "Alpha 2e3c:5760")
 
     def test_shift_click_skips_the_printer_check(self, modifiers):
         modifiers.return_value = Qt.KeyboardModifier.ShiftModifier

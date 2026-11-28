@@ -19,6 +19,7 @@ from ibp_printing import (
     PrintResult,
     UsbDevice,
 )
+from ibp_printing.printers import LABELWRITER_450_TURBO, PM2411BT, SP310
 from PIL import Image
 from PySide6.QtCore import QRectF  # pylint: disable=no-name-in-module
 
@@ -76,7 +77,7 @@ class PrinterManagerTests(unittest.TestCase):
 
     def test_get_available_printers_maps_usable_candidates_best_first(self):
         self.backend.candidates = [
-            _usb_candidate("Zebra 20d1:7008", "20D1:7008"),
+            _usb_candidate("PM2411BT 2e3c:5760", PM2411BT.vid_pid),
             _usb_candidate("Alpha-0922:0028", "0922:0028", is_default=True),
             PrinterCandidate(PrintQueue(name="Office Laser"), None),
             PrinterCandidate(PrintQueue(name="Unplugged 1111:2222"), "1111:2222"),
@@ -86,12 +87,32 @@ class PrinterManagerTests(unittest.TestCase):
 
         self.assertEqual(
             [printer.system_name for printer in printers],
-            ["Alpha-0922:0028", "Zebra 20d1:7008"],
+            ["Alpha-0922:0028", "PM2411BT 2e3c:5760"],
         )
         self.assertTrue(printers[0].is_default)
         self.assertEqual(printers[0].usb_id, "0922:0028")
         self.assertEqual(printers[0].transport, PrinterTransport.USB)
         self.assertFalse(printers[1].is_default)
+
+    def test_package_label_printers_are_never_offered(self):
+        self.backend.candidates = [
+            _usb_candidate("SP310 20d1:7008", SP310.vid_pid, is_default=True),
+            _usb_candidate("DYMO 0922:0021", LABELWRITER_450_TURBO.vid_pid),
+            _usb_candidate("PM2411BT 2e3c:5760", PM2411BT.vid_pid),
+            _usb_candidate("Unknown 1234:5678", "1234:5678"),
+        ]
+
+        printers = printer_manager.get_available_printers()
+
+        self.assertEqual(
+            sorted(printer.system_name for printer in printers),
+            ["PM2411BT 2e3c:5760", "Unknown 1234:5678"],
+        )
+
+    def test_only_a_package_label_printer_counts_as_none(self):
+        self.backend.candidates = [_usb_candidate("SP310 20d1:7008", SP310.vid_pid)]
+
+        self.assertEqual(printer_manager.get_available_printers(), [])
 
     def test_get_available_printers_lists_non_usb_queues_without_usb_matching(self):
         self.backend.candidates = [
