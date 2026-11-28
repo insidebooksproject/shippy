@@ -1,16 +1,13 @@
 """Read the return address from the IBP server, as shippy does.
 
-The server keeps one return address for every label (GET /shipping-settings),
-so the two shipping apps can't drift apart. The backend is served under
-``/api`` behind nginx (``http://host/api``); the base URL is normalized to end
-with one slash so ``urljoin`` keeps that prefix.
+The request itself is the shared client's (``shippy.core.ibp_server``); this
+sorts its failures into the two the volunteer is told about.
 """
-
-from urllib.parse import urljoin
 
 import requests
 from pydantic import ValidationError
 
+from shippy.core.ibp_server import Server, ServerError
 from shippy.gui.core.models import ReturnAddressConfig
 
 SHIPPING_SETTINGS_PATH = "shipping-settings"
@@ -36,14 +33,14 @@ def fetch_return_address(
         IbpServerError: the server sent an address that is incomplete or a
             response that isn't one.
     """
-    url = urljoin(base_url.rstrip("/") + "/", SHIPPING_SETTINGS_PATH)
+    server = Server(base_url, timeout=timeout)
+    url = server.url(SHIPPING_SETTINGS_PATH)
     try:
-        response = requests.get(url, timeout=timeout)
-        response.raise_for_status()
-        address = response.json()["return_address"]
-        return ReturnAddressConfig.model_validate(
-            {**address, "street2": address.get("street2") or ""}
-        )
+        return ReturnAddressConfig.model_validate(server.return_address())
+    except ServerError as error:
+        raise IbpServerUnreachable(
+            f"could not reach {url}: HTTP {error.status_code}: {error.detail}"
+        ) from error
     except requests.RequestException as error:
         raise IbpServerUnreachable(f"could not reach {url}: {error}") from error
     except (ValueError, KeyError, TypeError, AttributeError) as error:

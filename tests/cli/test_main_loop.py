@@ -11,7 +11,7 @@ import easypost  # type: ignore
 import requests
 
 from shippy.cli import app as cli, console
-from shippy.cli.server import ServerError
+from shippy.core.ibp_server import ServerError
 
 BASE_CONFIG = """\
 [ibp]

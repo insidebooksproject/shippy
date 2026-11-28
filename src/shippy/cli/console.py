@@ -9,7 +9,7 @@ from prompt_toolkit.completion import ThreadedCompleter
 
 from .addresses import AddressParser
 from .autocompletion import GoogleMapsCompleter
-from .server import JURISDICTIONS
+from shippy.core.ibp_server import JURISDICTIONS
 
 
 def query_unit(units: typing.Mapping[str, typing.Any]) -> typing.Optional[str]:

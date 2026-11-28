@@ -11,7 +11,7 @@ import pytest
 from shippy.cli import app as cli
 from shippy.core.models import Config
 
-from .conftest import BASE_URL, SHIPPING_SETTINGS, UNIT, request_address
+from ..conftest import BASE_URL, SHIPPING_SETTINGS, UNIT, request_address
 
 NOW = datetime.datetime(2026, 10, 1, tzinfo=datetime.timezone.utc)
 

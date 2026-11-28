@@ -32,7 +32,7 @@ from shippy.core import postage
 from shippy.core.log import CLI_APP, DIAG_APP, configure_logging
 from shippy.core.models import SMALL_BOX_MIN_WEIGHT_LB, Config
 from shippy.core.misc import add_logo, build_tempfile, grab_png_from_url, load_logo
-from .server import Server, ServerError, to_easypost_address
+from shippy.core.ibp_server import Server, ServerError, to_easypost_address
 
 # How long to follow a spooled label job before giving up on knowing its outcome.
 PRINT_TRACK_TIMEOUT_S = 30.0

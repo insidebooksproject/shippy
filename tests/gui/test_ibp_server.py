@@ -26,7 +26,7 @@ SETTINGS = {
 
 def response(body, status=200):
     """A requests.Response stand-in."""
-    fake = mock.Mock()
+    fake = mock.Mock(status_code=status, text=str(body))
     fake.json.return_value = body
     fake.raise_for_status.side_effect = (
         requests.HTTPError(f"{status} error") if status >= 400 else None
@@ -34,7 +34,7 @@ def response(body, status=200):
     return fake
 
 
-@mock.patch("shippy.gui.core.ibp_server.requests.get")
+@mock.patch("shippy.core.ibp_server.requests.get")
 class FetchReturnAddressTests(unittest.TestCase):
     """fetch_return_address() against a mocked server."""
 
@@ -60,10 +60,22 @@ class FetchReturnAddressTests(unittest.TestCase):
                     fetch_return_address("http://ibp.test/api")
 
     def test_http_error_raises(self, get):
-        get.return_value = response({"detail": "Not Found"}, status=404)
+        for status in (404, 500):
+            with self.subTest(status=status):
+                get.return_value = response({"detail": "Not Found"}, status=status)
 
-        with self.assertRaisesRegex(IbpServerUnreachable, "404"):
+                with self.assertRaisesRegex(IbpServerUnreachable, str(status)):
+                    fetch_return_address("http://ibp.test/api")
+
+    def test_missing_address_field_raises(self, get):
+        address = dict(SETTINGS["return_address"])
+        del address["city"]
+        get.return_value = response({"return_address": address})
+
+        with self.assertRaises(IbpServerError) as caught:
             fetch_return_address("http://ibp.test/api")
+
+        self.assertNotIsInstance(caught.exception, IbpServerUnreachable)
 
     def test_incomplete_address_raises(self, get):
         body = {"return_address": {**SETTINGS["return_address"], "city": ""}}

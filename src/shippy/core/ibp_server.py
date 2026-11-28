@@ -1,6 +1,8 @@
-"""Client for the IBP FastAPI backend.
+"""Client for the IBP FastAPI backend, used by both apps.
 
-All endpoints shippy uses are unauthenticated, read-only GETs returning JSON.
+All endpoints the apps use are unauthenticated, read-only GETs returning JSON.
+The server keeps one return address for every label (GET /shipping-settings),
+so the two apps can't drift apart.
 The backend is served under the ``/api`` root path behind nginx (e.g.
 ``http://host/api``) but also answers path-stripped on port 8000 directly
 (e.g. ``http://host:8000``); both base URL forms work here because the base is
@@ -74,8 +76,12 @@ class Server:
         """Create a Server instance from a Pydantic config object."""
         return cls(url=str(config.url))
 
+    def url(self, path: str) -> str:
+        """The full URL of an endpoint path under the base URL."""
+        return urljoin(self._url, path.lstrip("/"))
+
     def _get(self, path: str) -> typing.Any:
-        url = urljoin(self._url, path.lstrip("/"))
+        url = self.url(path)
         response = requests.get(url, timeout=self._timeout)
 
         if 400 <= response.status_code < 500:

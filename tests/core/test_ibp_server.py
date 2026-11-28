@@ -6,9 +6,9 @@ import pytest
 import requests
 
 from shippy.core.models import IbpConfig
-from shippy.cli.server import Server, ServerError, to_easypost_address
+from shippy.core.ibp_server import Server, ServerError, to_easypost_address
 
-from .conftest import (
+from ..conftest import (
     BASE_URL,
     SHIPPING_SETTINGS,
     UNIT,
@@ -93,7 +93,7 @@ def test_address_request_timeout_allows_a_tdcj_lookup():
     """The backend may query TDCJ (up to ~5 s) before answering an address."""
     server = Server.from_config(IbpConfig.model_validate({"url": BASE_URL}))
     with mock.patch(
-        "shippy.cli.server.requests.get",
+        "shippy.core.ibp_server.requests.get",
         return_value=make_response(200, request_address()),
     ) as get:
         server.inmate_request_address("TEX", 12345, 0)
