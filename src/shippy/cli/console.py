@@ -176,7 +176,29 @@ def query_address(gmaps: googlemaps.Client) -> typing.Optional[typing.Dict[str, 
     address["name"] = name
     address["company"] = company
 
+    # Google Maps may fill street2 with a building or place name, so show the
+    # address as it will go on the label before anything is bought.
+    questionary.print("  Address for the label:", style="fg:white")
+    for line in label_address_lines(address):
+        questionary.print(f"    {line}", style="fg:white")
+
     return address
+
+
+def label_address_lines(address: typing.Mapping[str, str]) -> list[str]:
+    """The lines of an address as they are printed on the label."""
+    city_state = ", ".join(
+        part for part in (address.get("city"), address.get("state")) if part
+    )
+    city_line = " ".join(part for part in (city_state, address.get("zipcode")) if part)
+    lines = [
+        address.get("name"),
+        address.get("company"),
+        address.get("street1"),
+        address.get("street2"),
+        city_line,
+    ]
+    return [line for line in lines if line]
 
 
 @contextlib.contextmanager
