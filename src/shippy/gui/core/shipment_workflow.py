@@ -233,6 +233,7 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
         progress = on_progress or (lambda _message: None)
 
         if not prepared_result.shipment or prepared_result.image is None:
+            logger.error("Printing asked for with no prepared label")
             return ShipmentWorkflowResult(
                 status=ShipmentWorkflowStatus.ERROR,
                 message="Shipment creation failed: No prepared label available.",
@@ -285,6 +286,12 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
         # The job was spooled; nothing below may refund.
         tracking = shipment.tracking_code
         if not print_result.outcome.ok:
+            logger.warning(
+                "Label %s sent to %r but its outcome is %s; it may not have printed",
+                tracking,
+                printer_name,
+                print_result.outcome.value,
+            )
             label_journal.update_status(shipment, label_journal.STATUS_CHECK_PRINTER)
             warning = _print_outcome_warning(printer_name, print_result)
             return ShipmentWorkflowResult(
@@ -336,7 +343,8 @@ class ShipmentWorkflow:  # pylint: disable=too-few-public-methods
             )
 
         # Outside the refund context: the label is queued and may print soon.
-        logger.info(
+        # A WARNING, as in the CLI: the printer failed, the app worked around it.
+        logger.warning(
             "Label %s did not print (%s); saved to %s", tracking, print_error, path
         )
         label_journal.update_status(shipment, label_journal.STATUS_QUEUED, file=path)

@@ -1,5 +1,7 @@
 """Settings dialog for shippy-gui configuration."""
 
+import logging
+
 from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disable=no-name-in-module
     QDialog,
     QVBoxLayout,
@@ -13,6 +15,7 @@ from PySide6.QtWidgets import (  # type: ignore[import-untyped] # pylint: disabl
 )
 from pydantic import ValidationError
 
+from shippy.gui.core.config import describe_validation_error
 from shippy.gui.core.config_manager import ConfigManager
 from shippy.gui.core.constants import (
     DEFAULT_FONT_SIZE,
@@ -23,6 +26,8 @@ from shippy.gui.core.constants import (
     WEIGHT_MIN_LBS,
 )
 from shippy.gui.core.models import Config
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsDialog(
@@ -171,6 +176,8 @@ class SettingsDialog(
         try:
             config = Config.model_validate(config_dict)
         except ValidationError as e:
+            # The form refusing what was typed is normal use, not an error.
+            logger.info("Settings not saved: %s", describe_validation_error(e))
             QMessageBox.critical(
                 self,
                 "Validation Error",

@@ -60,6 +60,18 @@ def load_config(path: str) -> Config:
     return Config.model_validate(config_dict)
 
 
+def describe_validation_error(error: ValidationError) -> str:
+    """The failing settings and why, for the log, without the values.
+
+    ``str(error)`` repeats each bad value, which can be an API key.
+    """
+    problems = [
+        f"{'.'.join(str(part) for part in item['loc']) or 'config'}: {item['msg']}"
+        for item in error.errors(include_url=False, include_input=False)
+    ]
+    return "; ".join(problems) or "invalid"
+
+
 def get_font_size_from_path(path: str) -> int:
     """Get font size from config, with a safe default."""
     if not os.path.exists(path):

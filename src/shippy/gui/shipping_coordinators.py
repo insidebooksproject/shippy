@@ -102,6 +102,7 @@ class AddressLookupCoordinator:
 
         address_parser = self._get_address_parser()
         if address_parser is None:
+            logger.error("Address search unavailable: Google Maps not configured")
             QMessageBox.critical(
                 self._parent_widget, "Error", "Google Maps not configured."
             )
@@ -117,6 +118,8 @@ class AddressLookupCoordinator:
         try:
             address_parts = address_parser(selected_prediction or search_query)
             if not address_parts:
+                # A search that found nothing is normal; no address in the log.
+                logger.info("Address search found no usable address")
                 self._status_presenter.set_status("Could not parse address", "error")
                 QMessageBox.warning(
                     self._parent_widget,
@@ -143,6 +146,7 @@ class AddressLookupCoordinator:
             googlemaps.exceptions.Timeout,
             googlemaps.exceptions.TransportError,
         ) as error:
+            logger.error("Google Maps address search failed", exc_info=True)
             self._status_presenter.set_status("Address search failed", "error")
             QMessageBox.critical(
                 self._parent_widget,
@@ -150,6 +154,7 @@ class AddressLookupCoordinator:
                 f"Google Maps API error:\n\n{error}",
             )
         except Exception as error:  # pylint: disable=broad-exception-caught
+            logger.error("Address search failed unexpectedly", exc_info=True)
             self._status_presenter.set_status("Address search failed", "error")
             QMessageBox.critical(
                 self._parent_widget,
@@ -230,6 +235,7 @@ class ShipmentFlowCoordinator:  # pylint: disable=too-many-instance-attributes
         shipment_service = self._get_shipment_service()
         config = self._get_config()
         if shipment_service is None or config is None:
+            logger.error("Create Label: services not configured")
             self._shipment_controls.clear_small_box()
             QMessageBox.critical(
                 self._parent_widget, "Error", "Services not configured."
@@ -355,6 +361,11 @@ class ShipmentFlowCoordinator:  # pylint: disable=too-many-instance-attributes
         """Queue a dialog-printed label that never started printing."""
         shipment_service = self._get_shipment_service()
         if shipment_service is None:
+            logger.error(
+                "Label %s did not print and could not be saved: services not "
+                "configured",
+                shipment.tracking_code,
+            )
             self._on_shipment_error(
                 "The label did not print and could not be saved: services "
                 f"not configured. Tracking: {shipment.tracking_code}"

@@ -352,10 +352,13 @@ class ShipmentWorkflowTests(unittest.TestCase):
         self.addCleanup(ibp_printing.set_backend, None)
         saved = Path("/tmp/to-print/TRACK123.png")
 
-        with patch(
-            "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry",
-            return_value=saved,
-        ) as mock_save:
+        with (
+            patch(
+                "shippy.gui.core.shipment_workflow.ibp_printing.save_for_retry",
+                return_value=saved,
+            ) as mock_save,
+            self.assertLogs("shippy.gui.core.shipment_workflow", "WARNING") as logs,
+        ):
             result = self.workflow.print_prepared_label(prepared_result, "")
 
         backend.print_image.assert_not_called()
@@ -368,6 +371,9 @@ class ShipmentWorkflowTests(unittest.TestCase):
         self.assertEqual(result.saved_label_path, saved)
         self.assertIn("no label printer was plugged in", result.message)
         self.assertEqual(self.journal.statuses(), ["queued"])
+        # A WARNING, like the CLI's: it reaches the error log.
+        self.assertEqual([record.levelname for record in logs.records], ["WARNING"])
+        self.assertIn("TRACK123", logs.records[0].getMessage())
 
     def test_print_prepared_label_refunds_when_label_cannot_be_saved(self):
         prepared_result = self._prepared()
@@ -526,13 +532,28 @@ class ShipmentWorkflowTests(unittest.TestCase):
             "Alpha 2e3c:5760", "Shipping Label", outcome=ibp_printing.JobOutcome.ERROR
         )
 
-        with patch(
-            "shippy.gui.core.shipment_workflow.print_image", return_value=print_result
+        with (
+            patch(
+                "shippy.gui.core.shipment_workflow.print_image",
+                return_value=print_result,
+            ),
+            self.assertLogs("shippy.gui.core.shipment_workflow", "WARNING") as logs,
         ):
             result = self.workflow.print_prepared_label(
                 prepared_result, "Alpha 2e3c:5760"
             )
 
+        # The volunteer is warned, so the log says so too.
+        self.assertEqual(
+            [(r.levelname, r.getMessage()) for r in logs.records],
+            [
+                (
+                    "WARNING",
+                    "Label TRACK123 sent to 'Alpha 2e3c:5760' but its outcome is "
+                    "error; it may not have printed",
+                )
+            ],
+        )
         self.assertEqual(result.status, ShipmentWorkflowStatus.SUCCESS)
         self.assertFalse(result.refund_requested)
         self.service.refund_shipment.assert_not_called()
